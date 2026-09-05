@@ -79,7 +79,7 @@ async function refreshAxPermission() {
   if (!EXT.permissions || !EXT.debugger) {
     axGrantEl.disabled = true;
     axGrantEl.textContent = "Not available in this browser";
-    axHintEl.textContent = "The browser accessibility tree uses chrome.debugger, which Firefox does not provide.";
+    axHintEl.textContent = "The browser accessibility tree and the reflow test use chrome.debugger, which Firefox does not provide.";
     return;
   }
   const has = await EXT.permissions.contains({ permissions: ["debugger"] });

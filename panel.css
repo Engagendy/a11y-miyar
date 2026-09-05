@@ -1180,6 +1180,11 @@ details.sr-more > .sr-sel { margin-top: 2px; }
 .sr-ntc-kind { font-size: 11px; opacity: 0.7; }
 .sr-ntc-colors code { font-size: 11px; }
 .sr-ntc-ratio { color: var(--serious); }
+.sr-reflow-shots { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; margin-block: 4px 8px; }
+.sr-reflow-shot { margin: 0; display: flex; flex-direction: column; gap: 3px; font-size: 11px; opacity: 0.85; min-width: 0; }
+.sr-reflow-shot img { display: block; max-height: 220px; max-width: 100%; width: auto; border: 1px solid var(--border); border-radius: 4px; background: #fff; }
+.sr-reflow-shot figcaption { font-variant-numeric: tabular-nums; }
+.sr-reflow-code { font-size: 11px; opacity: 0.7; }
 .sr-fix { margin: 4px 0 6px; }
 .sr-fix code.sr-current { opacity: 0.75; }
 /* inline token diff between "Now" and "Change to" */

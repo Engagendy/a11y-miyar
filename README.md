@@ -276,6 +276,31 @@ engine behind axe DevTools.
     with both swatches and the ratio, disabled controls and children of a
     failed control skipped, and a `border-color` / `fill` / `background-color`
     fix at a passing colour (nearest UAE DLS token when "DLS colors" is on)
+  - *Reflow & zoom (WCAG 1.4.10 / 1.4.4, Chromium, opt-in)* — "Run reflow
+    test" renders the page through the DevTools protocol at a 320 px viewport
+    (what 400 % zoom on a 1280 px screen gives) and then, at its own width,
+    with 200 % text, and reports `reflow-horizontal-scroll` (serious: the page
+    scrolls sideways — the top-most boxes sticking out, with their width; a
+    non-wrapping row is named once, and boxes inside a scrolling/clipping
+    wrapper or an off-canvas drawer are not), `reflow-clipped-text` / `-200`
+    (moderate: text cut off by `overflow: hidden`/`clip` — its own or an
+    ancestor's — not boxes that scroll in place such as `<pre>`),
+    `reflow-overlap` / `-200` (serious: two controls whose boxes overlap by
+    more than 20 % and really cover each other, confirmed with a hit test;
+    moderate and labelled when they already overlap at the normal width) and
+    `reflow-fixed-too-tall` (moderate: an on-screen fixed bar — or a sticky
+    one stuck at the top — taller than a quarter of the screen, dialogs
+    excluded), each
+    with a CSS fix (`flex-wrap`, `min-width: 0`, `max-width: 100%`,
+    `overflow-wrap: anywhere`, `white-space: normal`, a stacking
+    `@media (max-width: 480px)`, `position: sticky` + `max-height: 40vh`) and
+    "before" / 320 px screenshots side by side in the section and the HTML/PDF
+    report (JSON keeps the findings, not the images); serious 5 / moderate 2,
+    one penalty per element across the 320 px and 200 % rows, capped at 25 in
+    the score. Every protocol call has a 15 s deadline so a page paused at a
+    breakpoint is restored rather than left at 320 px. Needs the same `debugger` permission as the
+    browser tree; "Run all checks" includes it only once that permission is
+    granted, otherwise the step shows the Grant-in-Options note
   - *Keyboard auto-walk* — "⌨ Auto-walk" in the Focus trace toolbar moves
     focus through every Tab stop in real Tab order (positive `tabindex` first,
     then DOM order, shadow roots flattened, hidden/inert/`aria-hidden` stops

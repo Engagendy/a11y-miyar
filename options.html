@@ -77,14 +77,15 @@
     produce false positives — review each finding.</p>
 
     <div class="row" id="axRow">
-      <label for="axGrant">Browser accessibility tree (Chromium only)</label>
+      <label for="axGrant">Browser accessibility tree &amp; reflow test (Chromium only)</label>
       <button id="axGrant" type="button">Grant debugger permission</button>
       <button id="axRevoke" type="button" hidden>Revoke</button>
     </div>
     <p class="hint" id="axHint">The 🔊 Screen reader tab can fetch the accessibility tree the browser
-    actually hands to NVDA/VoiceOver, via the DevTools protocol. Chrome shows an "is debugging this
-    tab" bar while the tree is read (about a second) and the permission is released right after.
-    Nothing leaves your machine.</p>
+    actually hands to NVDA/VoiceOver, and run the reflow test (the page rendered at a 320 px viewport
+    and with 200 % text, WCAG 1.4.10 / 1.4.4), via the DevTools protocol. Chrome shows an "is debugging this
+    tab" bar while the tree is read or the page is re-rendered (about a second) and the page is restored
+    right after. Nothing leaves your machine.</p>
 
     <h1>AI fix (optional)</h1>
 

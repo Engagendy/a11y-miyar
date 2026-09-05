@@ -157,11 +157,25 @@ const STR = {
     srNtcStats: (r) => `${r.checked} control(s) measured · ` + (r.issues.length ? `⚠ ${r.issues.length} under 3:1` : "✓ all reach 3:1"),
     srNtcDone: (n) => n ? `Non-text contrast — ${n} control(s) under 3:1` : "Non-text contrast — all controls reach 3:1", srNtcFailed: "Non-text contrast check failed: ",
     srNtcKind: { border: "border", background: "background", icon: "icon" }, srNtcOn: "on",
+    srSecReflow: "Reflow & zoom (320 px / 200 % text)", srReflow: "Run reflow test", srReflowRunning: "Rendering the page at a 320 px viewport, then at its own width with 200 % text, through the DevTools protocol…",
+    srReflowOk: "No horizontal scrolling, cut-off text, overlapping controls or oversized fixed bars at 320 px, and nothing cut off or overlapping with 200 % text.",
+    srReflowNote: "WCAG 1.4.10 Reflow / 1.4.4 Resize text — the page is rendered at 320 px wide (what 400 % zoom on a 1280 px screen gives) and then, back at its own width, with 200 % text (WCAG 1.4.4), through the DevTools protocol: horizontal scrolling (a scrolling wrapper, an off-canvas drawer or a data table that scrolls in its own box is fine), text cut off by overflow hidden/clip, controls that really cover each other (checked with a hit test — a search button on its input is fine) and fixed bars taller than a quarter of the screen (sticky ones only when stuck at the top; dialogs are skipped). Problems that already exist at the normal width are labelled and count as moderate. Needs the debugger permission (Options → Screen reader checks); Chrome shows a \"debugging\" bar for about a second and the page is restored afterwards.",
+    srReflowStats: (s) => `page ${s.scrollWidth} px wide at 320 px · ${s.controls} control(s)` + (s.issues ? ` · ⚠ ${s.issues} issue(s)` : " · ✓ reflows"),
+    srReflowDone: (n) => n ? `Reflow test — ${n} issue(s)` : "Reflow test — the page reflows", srReflowFailed: "Reflow test failed: ",
+    srReflowShotBase: (w) => `Before (${w} px)`, srReflowShot320: "320 px viewport",
+    srReflowPermission: "The debugger permission is not granted. Grant it once from the Options page (a user gesture there is required), then run again.",
+    srReflowUnavailable: "Not available in this browser — the reflow test uses chrome.debugger (Chromium only).",
+    srReflowSkipped: "Reflow test skipped by Run all checks — grant the debugger permission once in Options to include it.",
+    srReflowCode: { "reflow-horizontal-scroll": "horizontal scroll · 320 px", "reflow-clipped-text": "cut-off text · 320 px", "reflow-clipped-text-200": "cut-off text · 200 % text", "reflow-overlap": "overlap · 320 px", "reflow-overlap-200": "overlap · 200 % text", "reflow-fixed-too-tall": "fixed bar too tall · 320 px" },
+    srReflowMsg: (code, d) => code === "reflow-horizontal-scroll" ? `extends to ${d.right} px at a 320 px viewport (${d.width} px wide; the page scrolls to ${d.scrollWidth} px) — two-dimensional scrolling${d.row ? " — a row of children that does not wrap" : ""}`
+      : code.startsWith("reflow-clipped-text") ? `text cut off ${d.zoom ? "with 200 % text" : "at 320 px"}: needs ${d.need} px, the box is ${d.box} px (${d.props})${d.base ? " — also at the normal viewport" : ""}`
+      : code.startsWith("reflow-overlap") ? `overlaps ${d.sel2} by ${d.pct} % ${d.zoom ? "with 200 % text" : "at 320 px"} — one of the two controls is covered${d.base ? " (also at the normal viewport)" : ""}`
+      : `${d.position} bar ${d.height} px tall covers ${d.pct} % of an ${d.innerHeight} px screen at 320 px`,
     srAx: "Fetch browser tree", srAxRunning: "Reading the accessibility tree through the DevTools protocol…",
     srAxNote: "Reads the tree the browser hands to NVDA/VoiceOver through the DevTools protocol — the ground truth when the reading order above and the real screen reader disagree. Needs the debugger permission (Options → Screen reader checks); Chrome shows a \"debugging\" bar for about a second.",
     srScoreTitle: "Screen reader score", srScoreOf: "of 100", srScoreTop: "Top 5 to fix", srScoreClean: "Nothing to fix — every section that has run is clean.",
     srScorePass: "✓ PASS", srScoreWarn: "△ WARN", srScoreFail: "✗ FAIL", srScoreIssues: (n) => `${n} issue(s)`, srScoreNotRun: "not run",
-    srScoreSecOrder: "reading order", srScoreSecLive: "live regions", srScoreSecFocus: "focus trace", srScoreSecLang: "language", srScoreSecNtc: "non-text contrast", srScoreSecAx: "browser tree", srScoreSecCmp: "bilingual",
+    srScoreSecOrder: "reading order", srScoreSecLive: "live regions", srScoreSecFocus: "focus trace", srScoreSecLang: "language", srScoreSecNtc: "non-text contrast", srScoreSecReflow: "reflow", srScoreSecAx: "browser tree", srScoreSecCmp: "bilingual",
     srSecCmp: "Bilingual comparison (AR/EN)", srCmp: "Compare", srCmpRunning: "Loading the other-language page in a hidden tab and comparing…",
     srCmpUrlPh: "https://…/ar/ — URL of the other-language version",
     srCmpNote: "Loads the other-language page in a hidden tab and diffs the two accessibility trees: controls, names, landmark labels, live regions and heading levels present on one side only, plus html lang/dir on each side.",
@@ -386,11 +400,25 @@ const STR = {
     srNtcStats: (r) => `قيس ${r.checked} عنصر تحكم · ` + (r.issues.length ? `⚠ ${r.issues.length} دون 3:1` : "✓ الكل يبلغ 3:1"),
     srNtcDone: (n) => n ? `التباين غير النصي — ${n} عنصر تحكم دون 3:1` : "التباين غير النصي — كل العناصر تبلغ 3:1", srNtcFailed: "فشل فحص التباين غير النصي: ",
     srNtcKind: { border: "إطار", background: "خلفية", icon: "أيقونة" }, srNtcOn: "على",
+    srSecReflow: "إعادة التدفق والتكبير (320 بكسل / نص 200٪)", srReflow: "تشغيل اختبار إعادة التدفق", srReflowRunning: "جارٍ عرض الصفحة بعرض 320 بكسل ثم بعرضها الأصلي مع نص 200٪ عبر بروتوكول DevTools…",
+    srReflowOk: "لا تمرير أفقي ولا نص مقطوع ولا عناصر تحكم متداخلة ولا أشرطة ثابتة ضخمة عند 320 بكسل، ولا نص مقطوع أو تداخل مع نص 200٪.",
+    srReflowNote: "معيار WCAG 1.4.10 إعادة التدفق / 1.4.4 تغيير حجم النص — تُعرض الصفحة بعرض 320 بكسل (ما يعطيه تكبير 400٪ على شاشة 1280 بكسل) ثم بعرضها الأصلي مع نص 200٪ (WCAG 1.4.4) عبر بروتوكول DevTools: التمرير الأفقي (لا بأس بحاوية تتمرر، أو درج خارج الشاشة، أو جدول بيانات يتمرر داخل صندوقه)، النص المقطوع بـ overflow hidden/clip، عناصر التحكم التي يغطي أحدها الآخر فعلاً (باختبار نقر — زر البحث فوق حقله لا بأس به)، والأشرطة الثابتة الأطول من ربع الشاشة (اللاصقة فقط عند التصاقها بالأعلى؛ تُتجاهل الحوارات). المشاكل الموجودة أصلاً بالعرض الطبيعي تُعلَّم وتُحسب متوسطة. يتطلب إذن debugger (الإعدادات ← فحوص قارئ الشاشة)؛ يعرض Chrome شريط \"debugging\" لنحو ثانية وتُستعاد الصفحة بعدها.",
+    srReflowStats: (s) => `عرض الصفحة ${s.scrollWidth} بكسل عند 320 بكسل · ${s.controls} عنصر تحكم` + (s.issues ? ` · ⚠ ${s.issues} مشكلة/مشاكل` : " · ✓ تعيد التدفق"),
+    srReflowDone: (n) => n ? `اختبار إعادة التدفق — ${n} مشكلة/مشاكل` : "اختبار إعادة التدفق — الصفحة تعيد التدفق", srReflowFailed: "فشل اختبار إعادة التدفق: ",
+    srReflowShotBase: (w) => `قبل (${w} بكسل)`, srReflowShot320: "عرض 320 بكسل",
+    srReflowPermission: "إذن debugger غير ممنوح. امنحه مرة واحدة من صفحة الإعدادات (يلزم تفاعل مستخدم هناك) ثم أعد التشغيل.",
+    srReflowUnavailable: "غير متاح في هذا المتصفح — اختبار إعادة التدفق يعتمد على chrome.debugger (Chromium فقط).",
+    srReflowSkipped: "تخطّى «تشغيل الفحوص» اختبار إعادة التدفق — امنح إذن debugger مرة واحدة من الإعدادات لتضمينه.",
+    srReflowCode: { "reflow-horizontal-scroll": "تمرير أفقي · 320 بكسل", "reflow-clipped-text": "نص مقطوع · 320 بكسل", "reflow-clipped-text-200": "نص مقطوع · نص 200٪", "reflow-overlap": "تداخل · 320 بكسل", "reflow-overlap-200": "تداخل · نص 200٪", "reflow-fixed-too-tall": "شريط ثابت طويل جداً · 320 بكسل" },
+    srReflowMsg: (code, d) => code === "reflow-horizontal-scroll" ? `يمتد حتى ${d.right} بكسل عند عرض 320 بكسل (عرضه ${d.width} بكسل؛ الصفحة تتمرر حتى ${d.scrollWidth} بكسل) — تمرير في اتجاهين${d.row ? " — صف من العناصر لا يلتف" : ""}`
+      : code.startsWith("reflow-clipped-text") ? `النص مقطوع ${d.zoom ? "مع نص 200٪" : "عند 320 بكسل"}: يحتاج ${d.need} بكسل والصندوق ${d.box} بكسل (${d.props})${d.base ? " — وأيضاً بالعرض الطبيعي" : ""}`
+      : code.startsWith("reflow-overlap") ? `يتداخل مع ${d.sel2} بنسبة ${d.pct}٪ ${d.zoom ? "مع نص 200٪" : "عند 320 بكسل"} — أحد العنصرين مغطّى${d.base ? " (وأيضاً بالعرض الطبيعي)" : ""}`
+      : `شريط ${d.position} بارتفاع ${d.height} بكسل يغطي ${d.pct}٪ من شاشة ${d.innerHeight} بكسل عند 320 بكسل`,
     srAx: "جلب شجرة المتصفح", srAxRunning: "جارٍ قراءة شجرة إمكانية الوصول عبر بروتوكول DevTools…",
     srAxNote: "يقرأ الشجرة التي يسلّمها المتصفح فعلاً إلى NVDA/VoiceOver عبر بروتوكول DevTools — المرجع الحاسم عندما يختلف ترتيب القراءة أعلاه عن قارئ الشاشة الحقيقي. يتطلب إذن debugger (الإعدادات ← فحوص قارئ الشاشة)؛ يعرض Chrome شريط \"debugging\" لنحو ثانية.",
     srScoreTitle: "درجة قارئ الشاشة", srScoreOf: "من 100", srScoreTop: "أهم 5 إصلاحات", srScoreClean: "لا شيء لإصلاحه — كل قسم تم تشغيله سليم.",
     srScorePass: "✓ ناجح", srScoreWarn: "△ تحذير", srScoreFail: "✗ راسب", srScoreIssues: (n) => `${n} مشكلة`, srScoreNotRun: "لم يُشغَّل",
-    srScoreSecOrder: "ترتيب القراءة", srScoreSecLive: "المناطق الحية", srScoreSecFocus: "تتبّع التركيز", srScoreSecLang: "اللغة", srScoreSecNtc: "التباين غير النصي", srScoreSecAx: "شجرة المتصفح", srScoreSecCmp: "ثنائي اللغة",
+    srScoreSecOrder: "ترتيب القراءة", srScoreSecLive: "المناطق الحية", srScoreSecFocus: "تتبّع التركيز", srScoreSecLang: "اللغة", srScoreSecNtc: "التباين غير النصي", srScoreSecReflow: "إعادة التدفق", srScoreSecAx: "شجرة المتصفح", srScoreSecCmp: "ثنائي اللغة",
     srSecCmp: "مقارنة النسختين (عربي/إنجليزي)", srCmp: "قارن", srCmpRunning: "جارٍ تحميل صفحة اللغة الأخرى في تبويب مخفي ومقارنتها…",
     srCmpUrlPh: "https://…/en/ — رابط النسخة باللغة الأخرى",
     srCmpNote: "يحمّل صفحة اللغة الأخرى في تبويب مخفي ويقارن شجرتي إمكانية الوصول: عناصر التحكم، الأسماء، تسميات المعالم، المناطق الحية ومستويات العناوين الموجودة في جهة واحدة فقط، إضافة إلى lang/dir في كل جهة.",
@@ -2595,7 +2623,7 @@ async function exportReport(format) {
   const base = "a11y-miyar-" + safeName(report.url) + "-" +
     report.scannedAt.slice(0, 19).replace(/[:T]/g, "-");
   if (format === "json") {
-    const payload = { ...withSuggestions(report), manualTests: manualResultsForExport(), dls: lastDlsExport, screenReader: srResultsForExport() };
+    const payload = { ...withSuggestions(report), manualTests: manualResultsForExport(), dls: lastDlsExport, screenReader: srExportWithoutShots(srResultsForExport()) };
     download(base + ".json", "application/json", JSON.stringify(payload, null, 2));
   } else if (format === "csv") {
     download(base + ".csv", "text/csv", toCsv(report));
@@ -3006,7 +3034,7 @@ const HELP_TOPICS = [
   },
   {
     icon: "🔊", title: "Screen reader tab",
-    what: "Six checks for what a screen reader (and a low-vision keyboard user) actually receives. Reading order: every node with the role, accessible name and state axe-core computes, flagging unnamed controls, generic 'click here' links, placeholder-only fields, duplicate names, unlabelled clickable divs, aria-hidden focusables and missing state on custom controls — state-missing (a tab without aria-selected, a button/option/checkbox/switch whose 'active'/'selected'/'open' class token has no aria-pressed/selected/checked/expanded — Tailwind variants like active:bg-blue-800 and native <summary> are ignored), required-not-exposed (a single visible '*' or 'required'/'مطلوب' before a field with neither required nor aria-required — password masks and footnotes after the form do not count), readonly-misuse (readonly on a real date/time/combobox picker — a picker class, date input type or calendar button — the user is meant to change; a display-only created_date is fine) and stepper-no-state (a stepper/wizard list with tick icons, icons on some steps only or 'done'/'active' classes but no aria-current=\"step\" and no hidden 'Step 2 of 4, completed' text; a 'how it works' list with an icon on every item is not flagged). Form group labelling: group-no-label (serious: two or more checkbox/radio controls sharing a name or a wrapper with no <fieldset>/<legend> and no named role=\"group\"/\"radiogroup\" — a fieldset named by aria-label/aria-labelledby counts, an 'Other: [text]' field inside the fieldset does not un-name it, a shared name across two labelled fieldsets is two groups, two unrelated checkboxes side by side are not a set; the visible heading is offered as the group name; groups inside tables, menus and listboxes are skipped), question-not-associated (moderate: text ending in '?' followed by two or more visible, adjacent generic Yes/No/OK/Cancel/نعم/لا buttons with no role=\"group\" or dialog aria-labelledby, aria-describedby or a fieldset legend tying them together) and label-not-associated (serious: a <label> without for, or a span/div with a 'label' class or ending in ':', next to a field that has no accessible name or a different one — a placeholder-only name counts as different), with fieldset/legend, role=\"group\" aria-labelledby and <label for> fixes that reuse the visible text. Link behaviour: link-new-window (target=\"_blank\" — also formtarget on a button — with no 'opens in a new tab' in the name, title, aria-describedby or hidden text), link-download-hint (a .pdf/.docx/.xlsx/.zip/.csv or download link whose name gives neither the file type/size nor 'download'), link-external-hint (a link to another host with no 'external' hint) and link-as-button (serious: <a href=\"#\">, href=\"\" or javascript: — announced as 'same page link' — with a click handler or toggle/framework attribute, inside a pagination/breadcrumb, or on the current breadcrumb/pagination item; a bare 'Back to top' href=\"#\" is fine, and same-site subdomains such as eservices.mohre.gov.ae never count as external), each with a hidden-span / <button type=\"button\"> / aria-current=\"page\" fix and an Apply-on-page quick fix. Live regions: a monitor that classifies every DOM change as ANNOUNCED, VIA FOCUS, MAY BE MISSED or SILENT, logs state-not-announced when a click only toggles a state class (or shows/hides the aria-controls / next-sibling target) without any aria-* state change on the control (naming the missing aria-expanded/selected/pressed/checked/current), and watches SPA route changes (pushState/replaceState, popstate, hashchange, title changes): 1.5 s after the URL changes it logs a NAVIGATION entry — route-silent (same title, focus did not move, nothing announced), route-title-stale (document.title unchanged), route-h1-dup (same H1 as the previous page), route-focus-stuck (focus stranded mid-page or on a removed element) or route-ok — with React Router / Vue Router fix snippets (set document.title, focus the H1 with tabindex=-1, a role=\"status\" route announcer). In-page anchors (skip links, 'Back to top', #section links to an existing element) are not route changes; a query-only change (?page=2, sort/filter) keeps its title and H1 and is only noted as a minor route-silent when content re-rendered without an announcement. Focus trace: every focus move with its announced role/name, flagging focus lost to <body>, focus escaping a modal, hidden or unnamed targets, and — for every :focus-visible stop — the focus ring the sighted user sees (outline, else the most visible ring-shaped box-shadow layer, else a border-colour change against the un-focused border; over a background image the contrast is 'unknown', not measured against white): focus-ring-low-contrast (serious: ring colour under 3:1 against the effective background, ratio shown), focus-ring-thin (minor: under 2px) and focus-ring-clipped (moderate: an overflow hidden/auto/scroll ancestor cuts off the ring + outline-offset — calendar grids, carousels, scrollable tables), with a 'ring: outline 1px · 1.4:1' badge on the row and :focus-visible / wrapper-padding fixes; ⌨ Auto-walk moves focus through every Tab stop in real Tab order (positive tabindex first, then DOM order, shadow roots included, up to 400 stops) and reports stops the keyboard cannot reach, order jumps caused by positive tabindex, and trap candidates to verify by hand; on every stop that is (or is inside) a custom widget — role=\"tablist\"/\"radiogroup\"/\"listbox\"/\"menu\"/\"menubar\"/\"tree\"/\"grid\"/\"combobox\", an aria-haspopup trigger or a div/span with role=\"button\" — it also presses synthetic ArrowRight, ArrowDown, ArrowLeft, ArrowUp (until one moves), Enter, Space and Escape (on whatever holds focus, then on the popup) and watches 150 ms for a focus move, an aria-selected/expanded/checked/activedescendant change, a popup (listbox/menu/dialog/grid becoming visible) or any DOM change: widget-no-arrow-nav (serious: arrows changed nothing in a tablist/radiogroup/listbox/menu — roving tabindex + keydown fix, React/Vue variants), widget-no-enter-space (moderate: Enter and Space changed nothing on a role=\"button\" div, combobox or aria-haspopup trigger — verify manually, synthetic keys cannot trigger native activation) and widget-esc-no-close (moderate: the popup Enter opened stayed open after Escape). These are hints, not proof: native <select>, date inputs, contenteditable, submit buttons, Enter inside a <form>, native <button>/<a href>/<input> triggers (the browser turns Enter/Space into a click) and div buttons named Delete/Logout/Submit/Pay/Accept (the probe runs real handlers) are skipped, the page is restored after each probe (Escape, blur, re-focus) and at most 40 widgets are probed. Language: Arabic text under lang=\"en\" (and vice versa), missing/invalid lang and dir. Non-text contrast (WCAG 1.4.11, no axe rule): every visible form control, icon-only button/link and custom toggle (role=\"switch\", .toggle/.switch) is measured — every visible border side, the control's own background where it differs from its surroundings, and the strongest SVG fill/stroke or icon-font colour; the best of them decides, so a faint decorative border on an icon button with a dark glyph passes — against the effective background behind it (a photo or gradient behind the control is skipped as unknown); under 3:1 is nontext-contrast (serious) with both swatches, the ratio and a border-color / fill / background-color fix at a passing colour (nearest DLS token with 'DLS colors' on); disabled controls, native widgets the browser paints and children of a failed control are skipped. Browser tree: the real accessibility tree via the DevTools protocol (Chromium, opt-in). Every fix snippet follows the framework chosen in Options — plain HTML, React/JSX (htmlFor, className, onKeyDown, self-closing tags, useRef + useEffect for focus and showModal) or Vue (@click/@keydown, ref + $refs.dlg.showModal(), v-if hints) — and the 'Change to' header names the active framework. Repeated findings with the same markup shape (tag, classes, role, issue codes) collapse into one row with a '×N identical' badge, one fix and a collapsible list of the N selectors; on UAE DLS pages the group is labelled with the aegov-* component ('aegov-card · link'). Groups carry through to the Manual test findings and the exports (instances + selectors). A score card at the top (0–100, PASS/WARN/FAIL like the DLS report) weighs every finding by severity — duplicate names count once per group, silent live updates weigh most — lists the Top 5 things to fix, and is stored per URL so the History section shows the trend. Mechanical fixes (aria-label / alt / tabindex / inert / dir / lang attributes, role=\"status\" on a silent region, div→button retag, a <span lang> wrapper) have an 'Apply on page' button — with an inline text box for names you must choose — that changes the live page, re-runs the check and marks the row ✓ fixed when the issue is gone; Undo restores the original element. Changes live only until the page reloads. 'Hear it': every reading-order, browser-tree and focus-trace row has a 🔈 button that speaks what a screen reader would say (\"Your name, edit text, required\") through the browser's speech synthesis, using an Arabic or English voice per the element's lang; Play page reads the listed rows top to bottom while highlighting each element on the page, with a 0.8–2× rate slider. Playback is scoped: the filter box and 'issues only' decide which rows play (the Play button's tooltip says 'Play n rows'), every row has 'Play from here' (this row to the end) and 'Play this section' (this row and the rows nested under it — a card, a navigation, a form), 'Play from element' lets you click an element on the page and starts from its row, and while playing Space pauses/resumes and Esc stops; live-log entries speak their announced text with the politeness prefix. Bilingual comparison: enter the URL of the other-language version (guessed from /ar/ ↔ /en/, ?lang= or an ar./en. host prefix) and Compare loads it in a hidden tab, then lists what differs between the two accessibility trees — controls present in one language only, controls or landmarks named in one and unnamed in the other, live regions missing on one side, heading counts per level, and html lang/dir on each side — with fixes, a difference count in the score and the exports.",
+    what: "Eight checks for what a screen reader (and a low-vision keyboard user) actually receives. Reading order: every node with the role, accessible name and state axe-core computes, flagging unnamed controls, generic 'click here' links, placeholder-only fields, duplicate names, unlabelled clickable divs, aria-hidden focusables and missing state on custom controls — state-missing (a tab without aria-selected, a button/option/checkbox/switch whose 'active'/'selected'/'open' class token has no aria-pressed/selected/checked/expanded — Tailwind variants like active:bg-blue-800 and native <summary> are ignored), required-not-exposed (a single visible '*' or 'required'/'مطلوب' before a field with neither required nor aria-required — password masks and footnotes after the form do not count), readonly-misuse (readonly on a real date/time/combobox picker — a picker class, date input type or calendar button — the user is meant to change; a display-only created_date is fine) and stepper-no-state (a stepper/wizard list with tick icons, icons on some steps only or 'done'/'active' classes but no aria-current=\"step\" and no hidden 'Step 2 of 4, completed' text; a 'how it works' list with an icon on every item is not flagged). Form group labelling: group-no-label (serious: two or more checkbox/radio controls sharing a name or a wrapper with no <fieldset>/<legend> and no named role=\"group\"/\"radiogroup\" — a fieldset named by aria-label/aria-labelledby counts, an 'Other: [text]' field inside the fieldset does not un-name it, a shared name across two labelled fieldsets is two groups, two unrelated checkboxes side by side are not a set; the visible heading is offered as the group name; groups inside tables, menus and listboxes are skipped), question-not-associated (moderate: text ending in '?' followed by two or more visible, adjacent generic Yes/No/OK/Cancel/نعم/لا buttons with no role=\"group\" or dialog aria-labelledby, aria-describedby or a fieldset legend tying them together) and label-not-associated (serious: a <label> without for, or a span/div with a 'label' class or ending in ':', next to a field that has no accessible name or a different one — a placeholder-only name counts as different), with fieldset/legend, role=\"group\" aria-labelledby and <label for> fixes that reuse the visible text. Link behaviour: link-new-window (target=\"_blank\" — also formtarget on a button — with no 'opens in a new tab' in the name, title, aria-describedby or hidden text), link-download-hint (a .pdf/.docx/.xlsx/.zip/.csv or download link whose name gives neither the file type/size nor 'download'), link-external-hint (a link to another host with no 'external' hint) and link-as-button (serious: <a href=\"#\">, href=\"\" or javascript: — announced as 'same page link' — with a click handler or toggle/framework attribute, inside a pagination/breadcrumb, or on the current breadcrumb/pagination item; a bare 'Back to top' href=\"#\" is fine, and same-site subdomains such as eservices.mohre.gov.ae never count as external), each with a hidden-span / <button type=\"button\"> / aria-current=\"page\" fix and an Apply-on-page quick fix. Live regions: a monitor that classifies every DOM change as ANNOUNCED, VIA FOCUS, MAY BE MISSED or SILENT, logs state-not-announced when a click only toggles a state class (or shows/hides the aria-controls / next-sibling target) without any aria-* state change on the control (naming the missing aria-expanded/selected/pressed/checked/current), and watches SPA route changes (pushState/replaceState, popstate, hashchange, title changes): 1.5 s after the URL changes it logs a NAVIGATION entry — route-silent (same title, focus did not move, nothing announced), route-title-stale (document.title unchanged), route-h1-dup (same H1 as the previous page), route-focus-stuck (focus stranded mid-page or on a removed element) or route-ok — with React Router / Vue Router fix snippets (set document.title, focus the H1 with tabindex=-1, a role=\"status\" route announcer). In-page anchors (skip links, 'Back to top', #section links to an existing element) are not route changes; a query-only change (?page=2, sort/filter) keeps its title and H1 and is only noted as a minor route-silent when content re-rendered without an announcement. Focus trace: every focus move with its announced role/name, flagging focus lost to <body>, focus escaping a modal, hidden or unnamed targets, and — for every :focus-visible stop — the focus ring the sighted user sees (outline, else the most visible ring-shaped box-shadow layer, else a border-colour change against the un-focused border; over a background image the contrast is 'unknown', not measured against white): focus-ring-low-contrast (serious: ring colour under 3:1 against the effective background, ratio shown), focus-ring-thin (minor: under 2px) and focus-ring-clipped (moderate: an overflow hidden/auto/scroll ancestor cuts off the ring + outline-offset — calendar grids, carousels, scrollable tables), with a 'ring: outline 1px · 1.4:1' badge on the row and :focus-visible / wrapper-padding fixes; ⌨ Auto-walk moves focus through every Tab stop in real Tab order (positive tabindex first, then DOM order, shadow roots included, up to 400 stops) and reports stops the keyboard cannot reach, order jumps caused by positive tabindex, and trap candidates to verify by hand; on every stop that is (or is inside) a custom widget — role=\"tablist\"/\"radiogroup\"/\"listbox\"/\"menu\"/\"menubar\"/\"tree\"/\"grid\"/\"combobox\", an aria-haspopup trigger or a div/span with role=\"button\" — it also presses synthetic ArrowRight, ArrowDown, ArrowLeft, ArrowUp (until one moves), Enter, Space and Escape (on whatever holds focus, then on the popup) and watches 150 ms for a focus move, an aria-selected/expanded/checked/activedescendant change, a popup (listbox/menu/dialog/grid becoming visible) or any DOM change: widget-no-arrow-nav (serious: arrows changed nothing in a tablist/radiogroup/listbox/menu — roving tabindex + keydown fix, React/Vue variants), widget-no-enter-space (moderate: Enter and Space changed nothing on a role=\"button\" div, combobox or aria-haspopup trigger — verify manually, synthetic keys cannot trigger native activation) and widget-esc-no-close (moderate: the popup Enter opened stayed open after Escape). These are hints, not proof: native <select>, date inputs, contenteditable, submit buttons, Enter inside a <form>, native <button>/<a href>/<input> triggers (the browser turns Enter/Space into a click) and div buttons named Delete/Logout/Submit/Pay/Accept (the probe runs real handlers) are skipped, the page is restored after each probe (Escape, blur, re-focus) and at most 40 widgets are probed. Language: Arabic text under lang=\"en\" (and vice versa), missing/invalid lang and dir. Non-text contrast (WCAG 1.4.11, no axe rule): every visible form control, icon-only button/link and custom toggle (role=\"switch\", .toggle/.switch) is measured — every visible border side, the control's own background where it differs from its surroundings, and the strongest SVG fill/stroke or icon-font colour; the best of them decides, so a faint decorative border on an icon button with a dark glyph passes — against the effective background behind it (a photo or gradient behind the control is skipped as unknown); under 3:1 is nontext-contrast (serious) with both swatches, the ratio and a border-color / fill / background-color fix at a passing colour (nearest DLS token with 'DLS colors' on); disabled controls, native widgets the browser paints and children of a failed control are skipped. Reflow & zoom (WCAG 1.4.10 / 1.4.4, Chromium, opt-in): through the DevTools protocol the page is rendered at a 320 px viewport (400 % zoom on a 1280 px screen) and then, at its own width, with 200 % text — reflow-horizontal-scroll (serious: the page scrolls sideways; the top-most boxes sticking out, with their width), reflow-clipped-text / -200 (moderate: text cut off by overflow hidden, nowrap or ellipsis), reflow-overlap / -200 (serious: two controls whose boxes overlap by more than 20 % and really cover each other — hit-tested; moderate when they already overlap at the normal width) and reflow-fixed-too-tall (moderate: a fixed bar, or a sticky one stuck at the top, taller than a quarter of the screen), each with a CSS fix (flex-wrap, min-width: 0, max-width: 100%, overflow-wrap, white-space: normal, a stacking media query, sticky + max-height) and before/320 px screenshots in the section and the HTML report; needs the same debugger permission as the browser tree, and Run all checks includes it only once that permission is granted. Browser tree: the real accessibility tree via the DevTools protocol (Chromium, opt-in). Every fix snippet follows the framework chosen in Options — plain HTML, React/JSX (htmlFor, className, onKeyDown, self-closing tags, useRef + useEffect for focus and showModal) or Vue (@click/@keydown, ref + $refs.dlg.showModal(), v-if hints) — and the 'Change to' header names the active framework. Repeated findings with the same markup shape (tag, classes, role, issue codes) collapse into one row with a '×N identical' badge, one fix and a collapsible list of the N selectors; on UAE DLS pages the group is labelled with the aegov-* component ('aegov-card · link'). Groups carry through to the Manual test findings and the exports (instances + selectors). A score card at the top (0–100, PASS/WARN/FAIL like the DLS report) weighs every finding by severity — duplicate names count once per group, silent live updates weigh most — lists the Top 5 things to fix, and is stored per URL so the History section shows the trend. Mechanical fixes (aria-label / alt / tabindex / inert / dir / lang attributes, role=\"status\" on a silent region, div→button retag, a <span lang> wrapper) have an 'Apply on page' button — with an inline text box for names you must choose — that changes the live page, re-runs the check and marks the row ✓ fixed when the issue is gone; Undo restores the original element. Changes live only until the page reloads. 'Hear it': every reading-order, browser-tree and focus-trace row has a 🔈 button that speaks what a screen reader would say (\"Your name, edit text, required\") through the browser's speech synthesis, using an Arabic or English voice per the element's lang; Play page reads the listed rows top to bottom while highlighting each element on the page, with a 0.8–2× rate slider. Playback is scoped: the filter box and 'issues only' decide which rows play (the Play button's tooltip says 'Play n rows'), every row has 'Play from here' (this row to the end) and 'Play this section' (this row and the rows nested under it — a card, a navigation, a form), 'Play from element' lets you click an element on the page and starts from its row, and while playing Space pauses/resumes and Esc stops; live-log entries speak their announced text with the politeness prefix. Bilingual comparison: enter the URL of the other-language version (guessed from /ar/ ↔ /en/, ?lang= or an ar./en. host prefix) and Compare loads it in a hidden tab, then lists what differs between the two accessibility trees — controls present in one language only, controls or landmarks named in one and unnamed in the other, live regions missing on one side, heading counts per level, and html lang/dir on each side — with fixes, a difference count in the score and the exports.",
     benefit: "Most screen reader bugs are naming and state-sequence problems that a DOM snapshot cannot reveal. These turn 'did it announce?' from a memory test into evidence you can click, and drop straight into the Manual test findings and exports.",
     example: "You start the live monitor, submit a form empty, and the log shows the red error text as SILENT. The fix is one role=\"alert\" on the container — verified by re-submitting and seeing ANNOUNCED [assertive].",
   },
@@ -3231,7 +3259,7 @@ const HELP_AR = {
   },
   "Screen reader tab": {
     title: "تبويب قارئ الشاشة",
-    what: "ستة فحوص لما يصل فعلاً إلى قارئ الشاشة (ومستخدم لوحة المفاتيح ضعيف البصر). ترتيب القراءة: كل عقدة مع الدور والاسم المتاح والحالة كما يحسبها axe-core، مع تعليم عناصر التحكم بلا اسم، وروابط \"اضغط هنا\" العامة، والحقول المسمّاة بالـ placeholder فقط، والأسماء المكررة، وعناصر div القابلة للنقر بلا دور، والعناصر القابلة للتركيز داخل aria-hidden، والحالة المفقودة في عناصر التحكم المخصصة — state-missing (تبويب بلا aria-selected، أو زر/خيار/مربع اختيار/مفتاح يحمل صنفاً كاملاً active/selected/open بلا aria-pressed/selected/checked/expanded — تُتجاهل متغيرات Tailwind مثل active:bg-blue-800 وعنصر summary الأصلي)، وrequired-not-exposed (نجمة \"*\" واحدة أو كلمة \"مطلوب\"/\"required\" ظاهرة قبل حقل بلا required ولا aria-required — لا تُحتسب أقنعة كلمة المرور ولا الحواشي بعد النموذج)، وreadonly-misuse (readonly على منتقي تاريخ/وقت/combobox حقيقي — صنف منتقي أو نوع إدخال تاريخ أو زر تقويم — يُفترض أن يغيّره المستخدم؛ حقل created_date للعرض فقط لا يُعلَّم)، وstepper-no-state (قائمة خطوات/معالج بأيقونات صح أو أيقونات على بعض الخطوات فقط أو أصناف done/active بلا aria-current=\"step\" ولا نص مخفي \"الخطوة 2 من 4، مكتملة\"؛ قائمة «كيف يعمل» بأيقونة على كل عنصر لا تُعلَّم). تسمية مجموعات النماذج: group-no-label (خطير: عنصرا اختيار أو أكثر — مربعات اختيار أو اختيار مفرد — يتشاركان الاسم أو الحاوية بلا <fieldset>/<legend> ولا role=\"group\"/\"radiogroup\" مسمّى — fieldset المسمّى بـ aria-label/aria-labelledby يُحتسب، وحقل «أخرى: [نص]» داخل fieldset لا يلغي اسمه، والاسم المشترك بين fieldset مسمّيين يعني مجموعتين، ومربّعا اختيار غير مرتبطين متجاوران ليسا مجموعة — يُقترح العنوان الظاهر اسماً للمجموعة؛ وتُتجاهل المجموعات داخل الجداول والقوائم وlistbox)، وquestion-not-associated (متوسط: نص ينتهي بـ«؟» يليه زران عامّان أو أكثر نعم/لا/موافق/إلغاء/Yes/No بلا role=\"group\" مع aria-labelledby أو aria-describedby أو legend يربطهما به)، وlabel-not-associated (خطير: <label> بلا for، أو span/div بصنف label أو ينتهي بنقطتين، بجوار حقل بلا اسم متاح أو باسم مختلف — الاسم من placeholder فقط يُعدّ مختلفاً)، مع إصلاحات fieldset/legend وrole=\"group\" aria-labelledby و<label for> تعيد استخدام النص الظاهر. سلوك الروابط: link-new-window (target=\"_blank\" — أو formtarget على زر — دون عبارة «يُفتح في تبويب جديد» في الاسم أو title أو aria-describedby أو نص مخفي)، وlink-download-hint (رابط ‎.pdf/.docx/.xlsx/.zip/.csv أو download لا يذكر اسمه نوع الملف/حجمه ولا كلمة «تحميل»)، وlink-external-hint (رابط إلى مضيف آخر بلا تلميح «خارجي»)، وlink-as-button (خطير: ‎<a href=\"#\"> أو href=\"\" أو javascript: — يُعلَن «رابط في نفس الصفحة» — مع معالج نقر أو سمة تبديل/إطار عمل، أو داخل ترقيم صفحات/مسار تنقّل، أو على العنصر الحالي فيهما؛ رابط «العودة للأعلى» بـ href=\"#\" فقط سليم، والنطاقات الفرعية للموقع نفسه مثل eservices.mohre.gov.ae لا تُعدّ خارجية)، لكلٍّ منها إصلاح بنص مخفي أو ‎<button type=\"button\"> أو aria-current=\"page\" وزر «طبّق على الصفحة». المناطق الحية: مراقب يصنّف كل تغيير في DOM إلى مُعلَن أو عبر التركيز أو قد يُفوَّت أو صامت، ويسجّل state-not-announced عندما تبدّل نقرةٌ صنفَ الحالة فقط (أو تُظهر/تُخفي هدف aria-controls أو العنصر التالي) دون أي تغيير في سمات aria-* على عنصر التحكم (مع تسمية السمة الناقصة aria-expanded/selected/pressed/checked/current)، ويراقب تنقّلات تطبيقات الصفحة الواحدة (pushState/replaceState وpopstate وhashchange وتغيّر العنوان): بعد 1.5 ث من تغيّر URL يسجّل مدخل «تنقّل» — route-silent (نفس العنوان، لم ينتقل التركيز، لم يُعلَن شيء) أو route-title-stale (لم يتغير document.title) أو route-h1-dup (نفس H1 للصفحة السابقة) أو route-focus-stuck (تركيز عالق في منتصف الصفحة أو على عنصر أُزيل) أو route-ok — مع مقتطفات إصلاح لـ React Router / Vue Router (ضبط document.title، تركيز H1 بـ tabindex=-1، ومُعلِن مسار role=\"status\"). روابط داخل الصفحة (روابط التخطي و«العودة للأعلى» و#قسم يشير إلى عنصر موجود) ليست تغييرات مسار؛ وتغيير معاملات الاستعلام فقط (?page=2 أو الفرز/التصفية) يحتفظ بعنوانه وH1 ويُسجَّل فقط كـ route-silent طفيف عند إعادة رسم المحتوى دون إعلان. تتبّع التركيز: كل انتقال للتركيز مع الدور/الاسم المُعلَن، مع تعليم فقدان التركيز إلى body، وهروبه من النافذة الحوارية، ووقوعه على عناصر مخفية أو بلا اسم، ولكل محطة :focus-visible حلقةَ التركيز التي يراها المستخدم المبصر (outline، وإلا أوضح طبقة box-shadow على شكل حلقة — ظلال الارتفاع المزاحة ليست حلقة — وإلا تغيّر لون الحد مقارنةً بالحد قبل التركيز؛ فوق صورة خلفية يُعرض التباين «مجهولاً» بدل قياسه على الأبيض): focus-ring-low-contrast (خطير: تباين لون الحلقة مع الخلفية الفعلية أقل من 3:1 مع عرض النسبة)، وfocus-ring-thin (طفيف: أقل من 2px)، وfocus-ring-clipped (متوسط: سلف بـ overflow hidden/auto/scroll يقصّ الحلقة مع outline-offset — شبكات التقويم والعارضات الدوّارة والجداول القابلة للتمرير) مع شارة «حلقة التركيز: outline 1px · 1.4:1» على الصف وإصلاحات :focus-visible / حشو الحاوية؛ و«⌨ جولة تلقائية» تنقل التركيز عبر كل محطات Tab بترتيب Tab الحقيقي (tabindex الموجب أولاً ثم ترتيب DOM، مع shadow roots، حتى 400 محطة) وتبلّغ عن المحطات التي لا تصلها لوحة المفاتيح، وقفزات الترتيب الناتجة عن tabindex الموجب، والمصائد المحتملة للتحقق منها يدوياً؛ وعند كل محطة تكون (أو تقع داخل) عنصراً مخصّصاً — role=\"tablist\"/\"radiogroup\"/\"listbox\"/\"menu\"/\"menubar\"/\"tree\"/\"grid\"/\"combobox\"، أو زر aria-haspopup، أو div/span بدور role=\"button\" — تضغط أيضاً مفاتيح اصطناعية ArrowRight وArrowDown وArrowLeft وArrowUp (حتى يحرّك أحدها التركيز) وEnter وSpace وEscape (على العنصر الذي يحمل التركيز ثم على القائمة المنبثقة) وتراقب 150 ملّي ثانية أي انتقال للتركيز أو تغيّر aria-selected/expanded/checked/activedescendant أو ظهور قائمة منبثقة (listbox/menu/dialog/grid) أو أي تغيّر في DOM: widget-no-arrow-nav (خطير: الأسهم لم تغيّر شيئاً داخل tablist/radiogroup/listbox/menu — إصلاح roving tabindex مع معالج keydown وبدائل React/Vue)، وwidget-no-enter-space (متوسط: Enter وSpace لم يغيّرا شيئاً في div بدور button أو combobox أو زر aria-haspopup — تحقّق يدوياً؛ المفاتيح الاصطناعية لا تُطلق التفعيل الأصلي)، وwidget-esc-no-close (متوسط: القائمة التي فتحها Enter لم تُغلق بـEscape). هذه تلميحات لا إثبات: تُتجاوز <select> الأصلية وحقول التاريخ وcontenteditable وأزرار الإرسال وEnter داخل <form> والمشغّلات الأصلية <button>/<a href>/<input> (المتصفح يحوّل Enter/Space إلى نقرة) وأزرار div المسمّاة حذف/خروج/إرسال/دفع/موافق (الفحص يشغّل المعالجات فعلاً)، وتُستعاد الصفحة بعد كل فحص (Escape ثم blur ثم إعادة التركيز)، وبحد أقصى 40 عنصراً. اللغة: نص عربي تحت lang=\"en\" (والعكس)، وغياب/عدم صحة lang وdir. التباين غير النصي (WCAG 1.4.11، لا قاعدة له في axe): يُقاس كل حقل نموذج مرئي وزر/رابط أيقوني ومفتاح تبديل مخصص (role=\"switch\" أو .toggle/.switch) — كل جانب حدود ظاهر، وخلفية العنصر نفسه حيث تختلف عن محيطها، وأقوى لون fill/stroke في SVG أو لون خط الأيقونة؛ الأفضل بينها هو الحكم، فإطار زخرفي باهت على زر أيقونة داكنة يجتاز — مقابل الخلفية الفعلية خلفه (صورة أو تدرّج خلف العنصر يُتجاوز كمجهول)؛ ما دون 3:1 يُعلَّم nontext-contrast (خطير) مع عيّنتي اللون والنسبة وإصلاح border-color / fill / background-color بلون ناجح (أقرب رمز DLS عند تفعيل «ألوان DLS»)؛ وتُتجاهل العناصر المعطّلة والعناصر الأصلية التي يرسمها المتصفح وأبناء عنصر فشل بالفعل. شجرة المتصفح: شجرة إمكانية الوصول الحقيقية عبر بروتوكول DevTools (Chromium، اختياري). كل مقتطف إصلاح يتبع إطار العمل المختار في الإعدادات — HTML عادي، أو React/JSX (htmlFor وclassName وonKeyDown ووسوم ذاتية الإغلاق وuseRef + useEffect للتركيز وshowModal) أو Vue (@click/@keydown وref + $refs.dlg.showModal() وتلميحات v-if) — ويُظهر عنوان \"غيّره إلى\" إطار العمل النشط. النتائج المكررة ذات الشكل نفسه (الوسم والأصناف والدور ورموز المشاكل) تُدمج في صف واحد بشارة \"×N متطابقة\" وإصلاح واحد وقائمة قابلة للطي بالمحددات الـN؛ وفي صفحات نظام التصميم الإماراتي تُسمّى المجموعة بمكوّن aegov-* (\"aegov-card · link\"). تنتقل المجموعات إلى نتائج الاختبار اليدوي والتصدير (عدد النسخ والمحددات). بطاقة الدرجة في الأعلى (0–100، ناجح/تحذير/راسب كتقرير نظام التصميم) تزن كل نتيجة حسب خطورتها — الأسماء المكررة تُحسب مرة لكل مجموعة، والتحديثات الحية الصامتة الأثقل — وتعرض أهم 5 إصلاحات، وتُحفظ لكل رابط ليعرض قسم السجل اتجاهها. الإصلاحات الميكانيكية (سمات aria-label / alt / tabindex / inert / dir / lang، وrole=\"status\" على منطقة صامتة، وتحويل div إلى button، وغلاف <span lang>) لها زر «طبّق على الصفحة» — مع حقل نصي للأسماء التي عليك اختيارها — يغيّر الصفحة الحية ويعيد الفحص ويعلّم الصف بـ✓ أُصلح عند اختفاء المشكلة؛ و«تراجع» يعيد العنصر الأصلي. التغييرات تبقى حتى إعادة تحميل الصفحة فقط. «اسمعه»: لكل صف في ترتيب القراءة وشجرة المتصفح وتتبّع التركيز زر 🔈 ينطق ما سيقوله قارئ الشاشة (\"الاسم، حقل نص، مطلوب\") عبر تركيب الكلام في المتصفح بصوت عربي أو إنجليزي حسب lang العنصر؛ زر تشغيل الصفحة يقرأ الصفوف المعروضة من الأعلى إلى الأسفل مع إبراز كل عنصر في الصفحة، مع شريط سرعة من 0.8 إلى 2×. التشغيل محدود النطاق: مربع التصفية و«المشاكل فقط» يحددان الصفوف التي تُنطق (تلميح زر التشغيل يقول «تشغيل n صف»)، ولكل صف زرا «التشغيل من هنا» (من هذا الصف إلى النهاية) و«تشغيل هذا القسم» (هذا الصف والصفوف المتداخلة تحته — بطاقة أو تنقّل أو نموذج)، وزر «التشغيل من عنصر» يتيح النقر على عنصر في الصفحة ليبدأ التشغيل من صفّه، وأثناء التشغيل تُوقف المسافة مؤقتاً/تستأنف وEsc يوقف؛ وإدخالات سجل المناطق الحية تُنطق مع بادئة الأولوية. مقارنة النسختين: أدخل رابط النسخة باللغة الأخرى (يُخمَّن من /ar/ ↔ /en/ أو ?lang= أو بادئة المضيف ar./en.) واضغط «قارن» فتُحمَّل في تبويب مخفي وتُعرض الفروق بين شجرتي إمكانية الوصول — عناصر تحكم موجودة في لغة واحدة فقط، عناصر أو معالم مسمّاة في جهة وبلا اسم في الأخرى، مناطق حية غائبة في جهة، عدد العناوين لكل مستوى، وlang/dir في كل جهة — مع الإصلاحات، وعدد الفروق في الدرجة والتصدير.",
+    what: "ثمانية فحوص لما يصل فعلاً إلى قارئ الشاشة (ومستخدم لوحة المفاتيح ضعيف البصر). ترتيب القراءة: كل عقدة مع الدور والاسم المتاح والحالة كما يحسبها axe-core، مع تعليم عناصر التحكم بلا اسم، وروابط \"اضغط هنا\" العامة، والحقول المسمّاة بالـ placeholder فقط، والأسماء المكررة، وعناصر div القابلة للنقر بلا دور، والعناصر القابلة للتركيز داخل aria-hidden، والحالة المفقودة في عناصر التحكم المخصصة — state-missing (تبويب بلا aria-selected، أو زر/خيار/مربع اختيار/مفتاح يحمل صنفاً كاملاً active/selected/open بلا aria-pressed/selected/checked/expanded — تُتجاهل متغيرات Tailwind مثل active:bg-blue-800 وعنصر summary الأصلي)، وrequired-not-exposed (نجمة \"*\" واحدة أو كلمة \"مطلوب\"/\"required\" ظاهرة قبل حقل بلا required ولا aria-required — لا تُحتسب أقنعة كلمة المرور ولا الحواشي بعد النموذج)، وreadonly-misuse (readonly على منتقي تاريخ/وقت/combobox حقيقي — صنف منتقي أو نوع إدخال تاريخ أو زر تقويم — يُفترض أن يغيّره المستخدم؛ حقل created_date للعرض فقط لا يُعلَّم)، وstepper-no-state (قائمة خطوات/معالج بأيقونات صح أو أيقونات على بعض الخطوات فقط أو أصناف done/active بلا aria-current=\"step\" ولا نص مخفي \"الخطوة 2 من 4، مكتملة\"؛ قائمة «كيف يعمل» بأيقونة على كل عنصر لا تُعلَّم). تسمية مجموعات النماذج: group-no-label (خطير: عنصرا اختيار أو أكثر — مربعات اختيار أو اختيار مفرد — يتشاركان الاسم أو الحاوية بلا <fieldset>/<legend> ولا role=\"group\"/\"radiogroup\" مسمّى — fieldset المسمّى بـ aria-label/aria-labelledby يُحتسب، وحقل «أخرى: [نص]» داخل fieldset لا يلغي اسمه، والاسم المشترك بين fieldset مسمّيين يعني مجموعتين، ومربّعا اختيار غير مرتبطين متجاوران ليسا مجموعة — يُقترح العنوان الظاهر اسماً للمجموعة؛ وتُتجاهل المجموعات داخل الجداول والقوائم وlistbox)، وquestion-not-associated (متوسط: نص ينتهي بـ«؟» يليه زران عامّان أو أكثر نعم/لا/موافق/إلغاء/Yes/No بلا role=\"group\" مع aria-labelledby أو aria-describedby أو legend يربطهما به)، وlabel-not-associated (خطير: <label> بلا for، أو span/div بصنف label أو ينتهي بنقطتين، بجوار حقل بلا اسم متاح أو باسم مختلف — الاسم من placeholder فقط يُعدّ مختلفاً)، مع إصلاحات fieldset/legend وrole=\"group\" aria-labelledby و<label for> تعيد استخدام النص الظاهر. سلوك الروابط: link-new-window (target=\"_blank\" — أو formtarget على زر — دون عبارة «يُفتح في تبويب جديد» في الاسم أو title أو aria-describedby أو نص مخفي)، وlink-download-hint (رابط ‎.pdf/.docx/.xlsx/.zip/.csv أو download لا يذكر اسمه نوع الملف/حجمه ولا كلمة «تحميل»)، وlink-external-hint (رابط إلى مضيف آخر بلا تلميح «خارجي»)، وlink-as-button (خطير: ‎<a href=\"#\"> أو href=\"\" أو javascript: — يُعلَن «رابط في نفس الصفحة» — مع معالج نقر أو سمة تبديل/إطار عمل، أو داخل ترقيم صفحات/مسار تنقّل، أو على العنصر الحالي فيهما؛ رابط «العودة للأعلى» بـ href=\"#\" فقط سليم، والنطاقات الفرعية للموقع نفسه مثل eservices.mohre.gov.ae لا تُعدّ خارجية)، لكلٍّ منها إصلاح بنص مخفي أو ‎<button type=\"button\"> أو aria-current=\"page\" وزر «طبّق على الصفحة». المناطق الحية: مراقب يصنّف كل تغيير في DOM إلى مُعلَن أو عبر التركيز أو قد يُفوَّت أو صامت، ويسجّل state-not-announced عندما تبدّل نقرةٌ صنفَ الحالة فقط (أو تُظهر/تُخفي هدف aria-controls أو العنصر التالي) دون أي تغيير في سمات aria-* على عنصر التحكم (مع تسمية السمة الناقصة aria-expanded/selected/pressed/checked/current)، ويراقب تنقّلات تطبيقات الصفحة الواحدة (pushState/replaceState وpopstate وhashchange وتغيّر العنوان): بعد 1.5 ث من تغيّر URL يسجّل مدخل «تنقّل» — route-silent (نفس العنوان، لم ينتقل التركيز، لم يُعلَن شيء) أو route-title-stale (لم يتغير document.title) أو route-h1-dup (نفس H1 للصفحة السابقة) أو route-focus-stuck (تركيز عالق في منتصف الصفحة أو على عنصر أُزيل) أو route-ok — مع مقتطفات إصلاح لـ React Router / Vue Router (ضبط document.title، تركيز H1 بـ tabindex=-1، ومُعلِن مسار role=\"status\"). روابط داخل الصفحة (روابط التخطي و«العودة للأعلى» و#قسم يشير إلى عنصر موجود) ليست تغييرات مسار؛ وتغيير معاملات الاستعلام فقط (?page=2 أو الفرز/التصفية) يحتفظ بعنوانه وH1 ويُسجَّل فقط كـ route-silent طفيف عند إعادة رسم المحتوى دون إعلان. تتبّع التركيز: كل انتقال للتركيز مع الدور/الاسم المُعلَن، مع تعليم فقدان التركيز إلى body، وهروبه من النافذة الحوارية، ووقوعه على عناصر مخفية أو بلا اسم، ولكل محطة :focus-visible حلقةَ التركيز التي يراها المستخدم المبصر (outline، وإلا أوضح طبقة box-shadow على شكل حلقة — ظلال الارتفاع المزاحة ليست حلقة — وإلا تغيّر لون الحد مقارنةً بالحد قبل التركيز؛ فوق صورة خلفية يُعرض التباين «مجهولاً» بدل قياسه على الأبيض): focus-ring-low-contrast (خطير: تباين لون الحلقة مع الخلفية الفعلية أقل من 3:1 مع عرض النسبة)، وfocus-ring-thin (طفيف: أقل من 2px)، وfocus-ring-clipped (متوسط: سلف بـ overflow hidden/auto/scroll يقصّ الحلقة مع outline-offset — شبكات التقويم والعارضات الدوّارة والجداول القابلة للتمرير) مع شارة «حلقة التركيز: outline 1px · 1.4:1» على الصف وإصلاحات :focus-visible / حشو الحاوية؛ و«⌨ جولة تلقائية» تنقل التركيز عبر كل محطات Tab بترتيب Tab الحقيقي (tabindex الموجب أولاً ثم ترتيب DOM، مع shadow roots، حتى 400 محطة) وتبلّغ عن المحطات التي لا تصلها لوحة المفاتيح، وقفزات الترتيب الناتجة عن tabindex الموجب، والمصائد المحتملة للتحقق منها يدوياً؛ وعند كل محطة تكون (أو تقع داخل) عنصراً مخصّصاً — role=\"tablist\"/\"radiogroup\"/\"listbox\"/\"menu\"/\"menubar\"/\"tree\"/\"grid\"/\"combobox\"، أو زر aria-haspopup، أو div/span بدور role=\"button\" — تضغط أيضاً مفاتيح اصطناعية ArrowRight وArrowDown وArrowLeft وArrowUp (حتى يحرّك أحدها التركيز) وEnter وSpace وEscape (على العنصر الذي يحمل التركيز ثم على القائمة المنبثقة) وتراقب 150 ملّي ثانية أي انتقال للتركيز أو تغيّر aria-selected/expanded/checked/activedescendant أو ظهور قائمة منبثقة (listbox/menu/dialog/grid) أو أي تغيّر في DOM: widget-no-arrow-nav (خطير: الأسهم لم تغيّر شيئاً داخل tablist/radiogroup/listbox/menu — إصلاح roving tabindex مع معالج keydown وبدائل React/Vue)، وwidget-no-enter-space (متوسط: Enter وSpace لم يغيّرا شيئاً في div بدور button أو combobox أو زر aria-haspopup — تحقّق يدوياً؛ المفاتيح الاصطناعية لا تُطلق التفعيل الأصلي)، وwidget-esc-no-close (متوسط: القائمة التي فتحها Enter لم تُغلق بـEscape). هذه تلميحات لا إثبات: تُتجاوز <select> الأصلية وحقول التاريخ وcontenteditable وأزرار الإرسال وEnter داخل <form> والمشغّلات الأصلية <button>/<a href>/<input> (المتصفح يحوّل Enter/Space إلى نقرة) وأزرار div المسمّاة حذف/خروج/إرسال/دفع/موافق (الفحص يشغّل المعالجات فعلاً)، وتُستعاد الصفحة بعد كل فحص (Escape ثم blur ثم إعادة التركيز)، وبحد أقصى 40 عنصراً. اللغة: نص عربي تحت lang=\"en\" (والعكس)، وغياب/عدم صحة lang وdir. التباين غير النصي (WCAG 1.4.11، لا قاعدة له في axe): يُقاس كل حقل نموذج مرئي وزر/رابط أيقوني ومفتاح تبديل مخصص (role=\"switch\" أو .toggle/.switch) — كل جانب حدود ظاهر، وخلفية العنصر نفسه حيث تختلف عن محيطها، وأقوى لون fill/stroke في SVG أو لون خط الأيقونة؛ الأفضل بينها هو الحكم، فإطار زخرفي باهت على زر أيقونة داكنة يجتاز — مقابل الخلفية الفعلية خلفه (صورة أو تدرّج خلف العنصر يُتجاوز كمجهول)؛ ما دون 3:1 يُعلَّم nontext-contrast (خطير) مع عيّنتي اللون والنسبة وإصلاح border-color / fill / background-color بلون ناجح (أقرب رمز DLS عند تفعيل «ألوان DLS»)؛ وتُتجاهل العناصر المعطّلة والعناصر الأصلية التي يرسمها المتصفح وأبناء عنصر فشل بالفعل. إعادة التدفق والتكبير (WCAG 1.4.10 / 1.4.4، Chromium، اختياري): عبر بروتوكول DevTools تُعرض الصفحة بعرض 320 بكسل (تكبير 400٪ على شاشة 1280 بكسل) ثم بعرضها الأصلي مع نص 200٪ — reflow-horizontal-scroll (خطير: الصفحة تتمرر أفقياً؛ الصناديق العليا البارزة مع عرضها)، reflow-clipped-text / -200 (متوسط: نص مقطوع بـ overflow hidden أو nowrap أو ellipsis)، reflow-overlap / -200 (خطير: عنصرا تحكم يتداخل صندوقاهما بأكثر من 20٪ ويغطي أحدهما الآخر فعلاً — باختبار نقر؛ متوسط إن كانا متداخلين بالعرض الطبيعي أصلاً) وreflow-fixed-too-tall (متوسط: شريط ثابت، أو لاصق ملتصق بالأعلى، أطول من ربع الشاشة)، لكل منها إصلاح CSS (flex-wrap، min-width: 0، max-width: 100%، overflow-wrap، white-space: normal، استعلام وسائط للتكديس، sticky + max-height) ولقطتا شاشة قبل/320 بكسل في القسم وفي تقرير HTML؛ يتطلب إذن debugger نفسه الذي تتطلبه شجرة المتصفح، ولا يضمّه «تشغيل الفحوص» إلا بعد منح الإذن. شجرة المتصفح: شجرة إمكانية الوصول الحقيقية عبر بروتوكول DevTools (Chromium، اختياري). كل مقتطف إصلاح يتبع إطار العمل المختار في الإعدادات — HTML عادي، أو React/JSX (htmlFor وclassName وonKeyDown ووسوم ذاتية الإغلاق وuseRef + useEffect للتركيز وshowModal) أو Vue (@click/@keydown وref + $refs.dlg.showModal() وتلميحات v-if) — ويُظهر عنوان \"غيّره إلى\" إطار العمل النشط. النتائج المكررة ذات الشكل نفسه (الوسم والأصناف والدور ورموز المشاكل) تُدمج في صف واحد بشارة \"×N متطابقة\" وإصلاح واحد وقائمة قابلة للطي بالمحددات الـN؛ وفي صفحات نظام التصميم الإماراتي تُسمّى المجموعة بمكوّن aegov-* (\"aegov-card · link\"). تنتقل المجموعات إلى نتائج الاختبار اليدوي والتصدير (عدد النسخ والمحددات). بطاقة الدرجة في الأعلى (0–100، ناجح/تحذير/راسب كتقرير نظام التصميم) تزن كل نتيجة حسب خطورتها — الأسماء المكررة تُحسب مرة لكل مجموعة، والتحديثات الحية الصامتة الأثقل — وتعرض أهم 5 إصلاحات، وتُحفظ لكل رابط ليعرض قسم السجل اتجاهها. الإصلاحات الميكانيكية (سمات aria-label / alt / tabindex / inert / dir / lang، وrole=\"status\" على منطقة صامتة، وتحويل div إلى button، وغلاف <span lang>) لها زر «طبّق على الصفحة» — مع حقل نصي للأسماء التي عليك اختيارها — يغيّر الصفحة الحية ويعيد الفحص ويعلّم الصف بـ✓ أُصلح عند اختفاء المشكلة؛ و«تراجع» يعيد العنصر الأصلي. التغييرات تبقى حتى إعادة تحميل الصفحة فقط. «اسمعه»: لكل صف في ترتيب القراءة وشجرة المتصفح وتتبّع التركيز زر 🔈 ينطق ما سيقوله قارئ الشاشة (\"الاسم، حقل نص، مطلوب\") عبر تركيب الكلام في المتصفح بصوت عربي أو إنجليزي حسب lang العنصر؛ زر تشغيل الصفحة يقرأ الصفوف المعروضة من الأعلى إلى الأسفل مع إبراز كل عنصر في الصفحة، مع شريط سرعة من 0.8 إلى 2×. التشغيل محدود النطاق: مربع التصفية و«المشاكل فقط» يحددان الصفوف التي تُنطق (تلميح زر التشغيل يقول «تشغيل n صف»)، ولكل صف زرا «التشغيل من هنا» (من هذا الصف إلى النهاية) و«تشغيل هذا القسم» (هذا الصف والصفوف المتداخلة تحته — بطاقة أو تنقّل أو نموذج)، وزر «التشغيل من عنصر» يتيح النقر على عنصر في الصفحة ليبدأ التشغيل من صفّه، وأثناء التشغيل تُوقف المسافة مؤقتاً/تستأنف وEsc يوقف؛ وإدخالات سجل المناطق الحية تُنطق مع بادئة الأولوية. مقارنة النسختين: أدخل رابط النسخة باللغة الأخرى (يُخمَّن من /ar/ ↔ /en/ أو ?lang= أو بادئة المضيف ar./en.) واضغط «قارن» فتُحمَّل في تبويب مخفي وتُعرض الفروق بين شجرتي إمكانية الوصول — عناصر تحكم موجودة في لغة واحدة فقط، عناصر أو معالم مسمّاة في جهة وبلا اسم في الأخرى، مناطق حية غائبة في جهة، عدد العناوين لكل مستوى، وlang/dir في كل جهة — مع الإصلاحات، وعدد الفروق في الدرجة والتصدير.",
     benefit: "معظم أخطاء قارئ الشاشة مشاكل تسمية وتسلسل حالات لا تكشفها لقطة DOM. تحوّل هذه الفحوص سؤال \"هل أُعلن؟\" من اختبار ذاكرة إلى دليل قابل للنقر، يُضاف مباشرة إلى نتائج الاختبار اليدوي والتصدير.",
     example: "تبدأ مراقبة المناطق الحية، ترسل نموذجاً فارغاً، فيُظهر السجل نص الخطأ الأحمر كـ\"صامت\". الإصلاح إضافة role=\"alert\" واحد على الحاوية — تتحقق بإعادة الإرسال ورؤية \"مُعلَن [assertive]\".",
   },
@@ -3857,6 +3885,11 @@ const srWalkSummary = document.getElementById("srWalkSummary");
 const srLangBtn = document.getElementById("srLangBtn");
 const srNtcBtn = document.getElementById("srNtcBtn");
 const srNtcList = document.getElementById("srNtcList");
+const srReflowBtn = document.getElementById("srReflowBtn");
+const srReflowList = document.getElementById("srReflowList");
+const srReflowStats = document.getElementById("srReflowStats");
+const srReflowShots = document.getElementById("srReflowShots");
+let srDebuggerAvailable = true; // Chromium: chrome.debugger exists (the permission itself may still need granting); false on Firefox
 const srCmpUrl = document.getElementById("srCmpUrl");
 const srCmpBtn = document.getElementById("srCmpBtn");
 const srCmpList = document.getElementById("srCmpList");
@@ -3872,11 +3905,11 @@ const srJourneyList = document.getElementById("srJourneyList");
 const srJourneyCopyBtn = document.getElementById("srJourneyCopyBtn");
 const srJourneyStats = document.getElementById("srJourneyStats");
 
-/* ---- step list (seven numbered sections) ----
+/* ---- step list (eight numbered sections) ----
    srSetStep(key, state, n) drives the li[data-state] + circle + state text; a step opens when it
    starts running or ends with issues/error, and closes again after a clean auto-opened run. */
-const SR_STEP_KEYS = { order: 1, live: 2, focus: 3, lang: 4, ntc: 5, cmp: 6, ax: 7 };
-const SR_STEP_ICONS = { order: "i-list", live: "i-bell", focus: "i-keyboard", lang: "i-globe", ntc: "i-contrast", cmp: "i-compare", ax: "i-tree" };
+const SR_STEP_KEYS = { order: 1, live: 2, focus: 3, lang: 4, ntc: 5, reflow: 6, cmp: 7, ax: 8 };
+const SR_STEP_ICONS = { order: "i-list", live: "i-bell", focus: "i-keyboard", lang: "i-globe", ntc: "i-contrast", reflow: "i-reflow", cmp: "i-compare", ax: "i-tree" };
 const srStepStates = {}; // key -> { state, n } (re-applied by applySrStrings)
 function srStepEl(key) { return srSteps ? srSteps.querySelector(`.step[data-step="${SR_STEP_KEYS[key]}"]`) : null; }
 function srSetStep(key, state, n = 0, force = false) {
@@ -3939,6 +3972,7 @@ const srState = {
   focus: { running: false, poll: null, log: [], startedByFlow: false, walking: false, walk: null },
   lang: null,
   ntc: null,            // non-text contrast: { url, checked, issues }
+  reflow: null,         // reflow / zoom test (debugger): { findings, summary, shots: { base, narrow } }
   ax: null,
   cmp: null,            // 🌐↔ bilingual comparison: { url, otherUrl, differences, other: { order, lang } }
   applied: [],          // fixes applied in place: { section, key (selector used), cur (selector now), code }
@@ -4148,7 +4182,7 @@ let srFilterPending = false;
     srFilterPending = true;
     requestAnimationFrame(() => { srFilterPending = false; applySrFilter(); });
   });
-  for (const el of [srOrderList, srLiveLog, srFocusLog, srLangList, srNtcList, srCmpList, srAxList, srJourneyList]) mo.observe(el, { childList: true, subtree: true });
+  for (const el of [srOrderList, srLiveLog, srFocusLog, srLangList, srNtcList, srReflowList, srCmpList, srAxList, srJourneyList]) mo.observe(el, { childList: true, subtree: true });
 }
 srIssuesOnly.addEventListener("change", () => {
   if (srState.order) renderSrRows(srState.order.rows, srOrderList, srIssuesOnly.checked);
@@ -4686,6 +4720,102 @@ async function runNtcCheck() {
 }
 srNtcBtn.addEventListener("click", runNtcCheck);
 
+/* ---- 4c. reflow / zoom test (chrome.debugger: 320 px viewport + 200 % text) ---- */
+
+const srReflowFixCtx = (i) => ({ html: i.html, sel: i.sel, sel2: i.sel2, html2: i.html2, tag: i.tag, name: i.name, code: i.code, section: "reflow", info: i.info, reflow: i });
+
+// "Grant the debugger permission in Options" note with a button, shared by the reflow test and the browser tree.
+function srGrantNote(container, msg) {
+  srEmpty(container, msg);
+  const b = document.createElement("button");
+  b.className = "btn";
+  setLabel(b, "i-gear", t("srAxOpenOptions"));
+  b.addEventListener("click", () => { try { EXT.runtime.openOptionsPage(); } catch (_) { window.open(EXT.runtime.getURL("options.html")); } });
+  container.appendChild(b);
+}
+
+function renderReflow(r) {
+  srReflowList.textContent = "";
+  srReflowShots.textContent = "";
+  srReflowStats.textContent = t("srReflowStats", r.summary);
+  const sh = r.shots || {};
+  srReflowShots.hidden = !(sh.base || sh.narrow);
+  const fig = (src, caption) => {
+    const f = document.createElement("figure");
+    f.className = "sr-reflow-shot";
+    const img = document.createElement("img");
+    img.src = src;
+    img.alt = caption;
+    const c = document.createElement("figcaption");
+    c.textContent = caption;
+    f.append(img, c);
+    return f;
+  };
+  if (sh.base) srReflowShots.appendChild(fig(sh.base, t("srReflowShotBase", r.summary.baseWidth)));
+  if (sh.narrow) srReflowShots.appendChild(fig(sh.narrow, t("srReflowShot320")));
+  if (!r.findings.length) { srEmpty(srReflowList, t("srReflowOk")); renderSrScore(); return; }
+  const frag = document.createDocumentFragment();
+  for (const i of r.findings) {
+    const row = document.createElement("div");
+    row.className = "sr-row has-issue level-" + i.level;
+    row.dataset.srSel = i.sel;
+    row.dataset.srCodes = i.code + (i.code.endsWith("-200") ? " zoom-200" : " width-320");
+    const tag = document.createElement("span");
+    tag.className = "sr-role";
+    tag.textContent = i.tag;
+    tag.title = i.code;
+    tag.addEventListener("click", () => highlight([i.sel]));
+    const body = document.createElement("span");
+    body.className = "sr-name";
+    const kind = document.createElement("span");
+    kind.className = "sr-reflow-code";
+    kind.textContent = t("srReflowCode")[i.code] || i.code;
+    body.append(kind, " ");
+    if (i.name) { const nm = document.createElement("span"); nm.className = "sr-lang-snippet"; nm.textContent = `“${i.name}”`; body.append(nm, " "); }
+    body.appendChild(srCode(i.sel));
+    if (i.sel2) body.append(" ↔ ", srCode(i.sel2));
+    const msg = document.createElement("div");
+    msg.className = "sr-issue " + i.level;
+    msg.textContent = srIssueMsg(i);
+    row.append(tag, body, msg);
+    const fctx = srReflowFixCtx(i);
+    const fix = srFixFor(i.code, fctx);
+    if (fix) srMoreAdd(row, srFixBlock(fix, fctx, srIssueMsg(i)), "2");
+    frag.appendChild(row);
+  }
+  srReflowList.appendChild(frag);
+  renderSrScore();
+}
+
+async function runReflowTest() {
+  srReflowBtn.disabled = true;
+  srSetStep("reflow", "running");
+  statusBusy(t("srReflowRunning"));
+  try {
+    const r = await bg("reflowTest");
+    if (!r || !Array.isArray(r.findings)) throw new Error("no result");
+    srState.reflow = r;
+    srState.restored = null;
+    renderReflow(r);
+    srSetStep("reflow", r.findings.length ? "issues" : "done", r.findings.length);
+    srPersist();
+    statusEl.textContent = t("srReflowDone", r.findings.length);
+  } catch (err) {
+    const m = err?.message || String(err);
+    srSetStep("reflow", "error");
+    if (m === "permission-needed") {
+      statusEl.textContent = "";
+      srGrantNote(srReflowList, t("srReflowPermission"));
+    } else {
+      statusEl.textContent = t("srReflowFailed") + m;
+      srEmpty(srReflowList, m);
+    }
+  } finally {
+    srReflowBtn.disabled = false;
+  }
+}
+srReflowBtn.addEventListener("click", runReflowTest);
+
 /* ---- 4b. bilingual AR/EN page comparison ----
    The other-language URL is loaded in a hidden tab by the background (op srCompare) and the two
    reading orders are paired by a structural key (role + tag + component + DOM path without
@@ -4930,12 +5060,7 @@ async function fetchAxTree() {
     srSetStep("ax", "error");
     if (m === "permission-needed") {
       statusEl.textContent = "";
-      srEmpty(srAxList, t("srAxPermission"));
-      const b = document.createElement("button");
-      b.className = "btn";
-      setLabel(b, "i-gear", t("srAxOpenOptions"));
-      b.addEventListener("click", () => { try { EXT.runtime.openOptionsPage(); } catch (_) { window.open(EXT.runtime.getURL("options.html")); } });
-      srAxList.appendChild(b);
+      srGrantNote(srAxList, t("srAxPermission"));
     } else {
       statusEl.textContent = t("srAxFailed") + m;
       srEmpty(srAxList, m);
@@ -4946,9 +5071,12 @@ async function fetchAxTree() {
 }
 srAxBtn.addEventListener("click", fetchAxTree);
 bg("axTreeAvailable").then((ok) => {
+  srDebuggerAvailable = !!ok;
   if (!ok) {
     srAxBtn.disabled = true;
     document.getElementById("srAxNote").textContent = t("srAxUnavailable");
+    srReflowBtn.disabled = true;
+    document.getElementById("srReflowNote").textContent = t("srReflowUnavailable");
   }
 }).catch(() => {});
 
@@ -4968,6 +5096,7 @@ const srLiveWeight = (e) => SR_LIVE_CODE_W[e.code] || SR_LIVE_W[e.kind];
 const srLiveLevel = (e) => SR_LIVE_CODE_LEVEL[e.code] || SR_LIVE_LEVEL[e.kind];
 const SR_LANG_CAP = 30;
 const SR_NTC_W = 5, SR_NTC_CAP = 20; // one serious per control, capped so a long form cannot zero the score
+const SR_REFLOW_W = { serious: 5, moderate: 2 }, SR_REFLOW_CAP = 25; // reflow / zoom: one broken layout produces many rows; the 320 px and 200 % rows of one element count once
 const SR_WIDGET_CAP = 15; // custom widget keyboard probe: serious 5 / moderate 2 (SR_W), capped — synthetic keys are hints, not proof
 const SR_SECTIONS = {
   order: { details: "srOrderSection", list: "srOrderList", label: "srScoreSecOrder" },
@@ -4975,14 +5104,15 @@ const SR_SECTIONS = {
   focus: { details: "srFocusSection", list: "srFocusLog", label: "srScoreSecFocus" },
   lang: { details: "srLangSection", list: "srLangList", label: "srScoreSecLang" },
   ntc: { details: "srNtcSection", list: "srNtcList", label: "srScoreSecNtc" },
+  reflow: { details: "srReflowSection", list: "srReflowList", label: "srScoreSecReflow" },
   cmp: { details: "srCmpSection", list: "srCmpList", label: "srScoreSecCmp" },
   ax: { details: "srAxSection", list: "srAxList", label: "srScoreSecAx" },
 };
 const SR_CMP_W = 2, SR_CMP_CAP = 20;
 
 function srScoreCompute() {
-  const o = srState.order, l = srState.live, f = srState.focus, g = srState.lang, a = srState.ax, c = srState.cmp, x = srState.ntc;
-  if (!o && !l.log.length && !f.log.length && !g && !a && !c && !x) return null;
+  const o = srState.order, l = srState.live, f = srState.focus, g = srState.lang, a = srState.ax, c = srState.cmp, x = srState.ntc, rf = srState.reflow;
+  if (!o && !l.log.length && !f.log.length && !g && !a && !c && !x && !rf) return null;
   const groups = new Map(); // key -> { section, level, weight, count, sels, title, detail, once }
   const add = (key, section, level, weight, sel, title, detail, once) => {
     let grp = groups.get(key);
@@ -5056,18 +5186,23 @@ function srScoreCompute() {
     for (const grp of groups.values()) if (grp.section === "ntc") grp.role = undefined;
     breakdown.ntc = x.issues.length;
   }
+  if (rf) {
+    for (const i of rf.findings) add("reflow|" + i.code.replace(/-200$/, "") + "|" + (i.sel || i.tag || "") + "|" + (i.sel2 || ""), "reflow", i.level, SR_REFLOW_W[i.level] || 2, i.sel, t("srReflowCode")[i.code] || i.code, srIssueMsg(i), true);
+    breakdown.reflow = rf.findings.length;
+  }
   if (c) {
     for (const d of c.differences) {
       add("cmp|" + d.code + "|" + (d.row.role || ""), "cmp", d.level, SR_CMP_W, d.side === "this" ? d.row.sel : "", `${d.row.role || ""} ${d.row.name ? '"' + d.row.name + '"' : ""}`.trim(), srCmpMsg(d));
     }
     breakdown.cmp = c.differences.length;
   }
-  let penalty = 0, langPenalty = 0, cmpPenalty = 0, ntcPenalty = 0, widgetPenalty = 0;
+  let penalty = 0, langPenalty = 0, cmpPenalty = 0, ntcPenalty = 0, widgetPenalty = 0, reflowPenalty = 0;
   for (const [key, grp] of groups) {
     if (grp.section === "lang") langPenalty += grp.weight; else if (grp.section === "cmp") cmpPenalty += grp.weight; else if (grp.section === "ntc") ntcPenalty += grp.weight;
+    else if (grp.section === "reflow") reflowPenalty += grp.weight;
     else if (key.startsWith("focus|widget-")) widgetPenalty += grp.weight; else penalty += grp.weight;
   }
-  penalty += Math.min(langPenalty, SR_LANG_CAP) + Math.min(cmpPenalty, SR_CMP_CAP) + Math.min(ntcPenalty, SR_NTC_CAP) + Math.min(widgetPenalty, SR_WIDGET_CAP);
+  penalty += Math.min(langPenalty, SR_LANG_CAP) + Math.min(cmpPenalty, SR_CMP_CAP) + Math.min(ntcPenalty, SR_NTC_CAP) + Math.min(widgetPenalty, SR_WIDGET_CAP) + Math.min(reflowPenalty, SR_REFLOW_CAP);
   const score = Math.max(0, Math.round(100 - penalty));
   const verdict = score >= 90 ? "pass" : score >= 70 ? "warn" : "fail";
   const top = [...groups.values()].sort((x, y) => y.weight - x.weight || LEVEL_RANK[x.level] - LEVEL_RANK[y.level]).slice(0, 5)
@@ -5341,9 +5476,14 @@ srJourneyCopyBtn.addEventListener("click", async () => {
 
 /* ---- export / reset glue ---- */
 
+// JSON export: the same results without the reflow screenshots (two data URLs would dwarf the report).
+function srExportWithoutShots(sr) {
+  return sr && sr.reflow ? { ...sr, reflow: { ...sr.reflow, shots: undefined } } : sr;
+}
+
 function srResultsForExport() {
-  const o = srState.order, l = srState.live, f = srState.focus, g = srState.lang, a = srState.ax, j = srState.journey, c = srState.cmp, x = srState.ntc;
-  if (!o && !l.log.length && !f.log.length && !g && !a && !j && !c && !x) return null;
+  const o = srState.order, l = srState.live, f = srState.focus, g = srState.lang, a = srState.ax, j = srState.journey, c = srState.cmp, x = srState.ntc, rf = srState.reflow;
+  if (!o && !l.log.length && !f.log.length && !g && !a && !j && !c && !x && !rf) return null;
   const sc = srScoreCompute();
   return {
     journey: j ? { duration: j.duration, pages: j.pages, transcript: srJourneyText(j),
@@ -5355,6 +5495,7 @@ function srResultsForExport() {
     focusTrace: f.log.length ? { moves: f.log.length, issues: f.log.filter((e) => e.issues && e.issues.length).map((e) => ({ t: e.t, sel: e.sel, role: e.role, name: e.name, html: e.html, code: e.issues[0].code, issues: e.issues.map((i) => i.level + ": " + i.msg), fix: srFixFor(e.issues[0].code, { html: e.html, sel: e.sel, role: e.role, name: e.name, tag: e.tag, info: e.issues[0].info, container: e.issues[0].container, ...srRingCtx(e) }) })) } : null,
     language: g ? { htmlLang: g.htmlLang, htmlDir: g.htmlDir, majority: g.majority, issues: g.issues.map((i) => ({ ...i, fix: srFixFor(i.type, { html: i.html, sel: i.sel, snippet: i.snippet, declared: i.declared, detected: i.type.startsWith("html-lang") ? g.majority : i.detected }) })) } : null,
     nonTextContrast: x ? { checked: x.checked, issues: x.issues.map((i) => ({ ...i, fix: srFixFor(i.code, srNtcFixCtx(i)) })) } : null,
+    reflow: rf ? { summary: rf.summary, findings: rf.findings.map((i) => ({ ...i, msg: srIssueMsg(i), fix: srFixFor(i.code, srReflowFixCtx(i)) })), shots: { base: (rf.shots && rf.shots.base) || "", narrow: (rf.shots && rf.shots.narrow) || "" } } : null,
     bilingual: c ? { url: c.url, otherUrl: c.otherUrl, differences: c.differences.map((d) => { const other = (sel) => d.side === "this" || !sel ? sel : c.otherUrl + " " + sel; return { kind: d.kind, code: d.code, level: d.level, side: d.side, msg: srCmpMsg(d, true), role: d.row.role, name: d.row.name || "", sel: other(d.row.sel || ""), html: d.row.html || "", instances: d.count, selectors: (d.sels || []).map(other),
       fix: d.fixCode ? srFixFor(d.fixCode, { html: d.row.html, sel: d.row.sel, role: d.row.role, name: d.row.name, tag: d.row.tag, declared: d.declared, detected: d.detected }) : null }; }) } : null,
     browserTree: a ? { summary: a.summary, issues: srGroupRows(a.rows).map((g) => { const r = g.row; return { sel: r.sel, role: r.role, name: r.name, component: g.component, instances: g.count, selectors: g.sels, code: r.issues[0].code, issues: r.issues.map((i) => i.level + ": " + i.msg), fix: srFixFor(r.issues[0].code, { sel: r.sel, role: r.role, name: r.name }) }; }) } : null,
@@ -5411,6 +5552,13 @@ function srSectionHtml() {
     parts.push(`<p>Non-text contrast (WCAG 1.4.11): ${r.nonTextContrast.checked} control(s) measured, ${r.nonTextContrast.issues.length} under 3:1</p>` +
       block("Control borders, toggles and icons under 3:1", r.nonTextContrast.issues, (i) => `<div style="border-top:1px solid #eee;padding:6px 0"><b style="color:${color[i.level]}">${escHtml(i.role || i.tag)}</b> ${i.name ? "“" + escHtml(i.name) + "” " : ""}<span dir="ltr">${escHtml(i.kind)} ${sw(i.color)} <code>${escHtml(i.color)}</code> on ${sw(i.bg)} <code>${escHtml(i.bg)}</code> · <b>${Number(i.ratio).toFixed(2)}:1</b></span> <code style="background:#eef2f6;border-radius:3px;padding:0 4px">${escHtml(i.sel)}</code><div style="font-size:13px">${escHtml(i.msg)}</div>${fixHtml(i)}</div>`));
   }
+  if (r.reflow) {
+    const s = r.reflow.summary || {}, sh = r.reflow.shots || {};
+    const fig = (src, cap) => src ? `<figure style="margin:0;font-size:11px;color:#666"><img src="${src}" alt="${escHtml(cap)}" style="display:block;max-height:260px;max-width:100%;border:1px solid #ddd;border-radius:4px;background:#fff"><figcaption>${escHtml(cap)}</figcaption></figure>` : "";
+    parts.push(`<p>Reflow &amp; zoom (WCAG 1.4.10 / 1.4.4): page ${escHtml(String(s.scrollWidth || ""))} px wide at a 320 px viewport — ${r.reflow.findings.length} issue(s)</p>` +
+      (sh.base || sh.narrow ? `<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start;margin:6px 0">${fig(sh.base, "Before (" + (s.baseWidth || "") + " px)")}${fig(sh.narrow, "320 px viewport")}</div>` : "") +
+      block("Reflow / zoom issues", r.reflow.findings, (i) => `<div style="border-top:1px solid #eee;padding:6px 0"><b style="color:${color[i.level]}">${escHtml(i.code)}</b> ${i.name ? "“" + escHtml(i.name) + "” " : ""}<code style="background:#eef2f6;border-radius:3px;padding:0 4px">${escHtml(i.sel)}</code>${i.sel2 ? " ↔ <code style=\"background:#eef2f6;border-radius:3px;padding:0 4px\">" + escHtml(i.sel2) + "</code>" : ""}<div style="font-size:13px">${escHtml(i.msg)}</div>${fixHtml(i)}</div>`));
+  }
   if (r.bilingual) {
     const b = r.bilingual;
     parts.push(`<p>Bilingual comparison: <code style="background:#eef2f6;border-radius:3px;padding:0 4px">${escHtml(b.url)}</code> ↔ <code style="background:#eef2f6;border-radius:3px;padding:0 4px">${escHtml(b.otherUrl)}</code> — ${b.differences.length} difference(s)</p>` +
@@ -5424,7 +5572,7 @@ function srSectionHtml() {
   if (r.score) {
     const vc = { pass: "#2e7d32", warn: "#b68a35", fail: "#d32f2f" }[r.score.verdict];
     const vl = { pass: "PASS", warn: "WARN", fail: "FAIL" }[r.score.verdict];
-    const secLabel = { order: "reading order", live: "live regions", focus: "focus trace", lang: "language", ntc: "non-text contrast", cmp: "bilingual", ax: "browser tree" };
+    const secLabel = { order: "reading order", live: "live regions", focus: "focus trace", lang: "language", ntc: "non-text contrast", reflow: "reflow", cmp: "bilingual", ax: "browser tree" };
     const counts = Object.keys(secLabel).map((k) => `${secLabel[k]}: ${r.score.breakdown[k] === undefined ? "not run" : r.score.breakdown[k] || "✓"}`).join(" · ");
     scoreHtml = `<div style="display:flex;gap:16px;align-items:flex-start;border:1px solid #ddd;border-radius:6px;padding:10px 14px;margin:8px 0">
     <div style="font-size:32px;font-weight:700;color:${vc};min-width:64px;text-align:center">${r.score.score}<div style="font-size:11px;font-weight:400;color:#666">of 100</div></div>
@@ -5775,6 +5923,7 @@ async function srReset() {
   srState.order = null;
   srState.lang = null;
   srState.ntc = null;
+  srState.reflow = null;
   srState.ax = null;
   srState.cmp = null;
   srState.live.log = [];
@@ -5791,9 +5940,12 @@ async function srReset() {
   srFocusLog.textContent = "";
   srLangList.textContent = "";
   srNtcList.textContent = "";
+  srReflowList.textContent = "";
+  srReflowShots.textContent = "";
+  srReflowShots.hidden = true;
   srCmpList.textContent = "";
   srAxList.textContent = "";
-  for (const id of ["srOrderStats", "srLiveStats", "srFocusStats", "srLangStats", "srNtcStats", "srCmpStats", "srAxStats"]) document.getElementById(id).textContent = "";
+  for (const id of ["srOrderStats", "srLiveStats", "srFocusStats", "srLangStats", "srNtcStats", "srReflowStats", "srCmpStats", "srAxStats"]) document.getElementById(id).textContent = "";
   srAddFindingsBtn.hidden = true;
   srState.restored = null;
   for (const key of Object.keys(SR_STEP_KEYS)) srSetStep(key, "idle");
@@ -5817,6 +5969,7 @@ function srOnNavigated() {
   srState.order = null;
   srState.lang = null;
   srState.ntc = null;
+  srState.reflow = null;
   srState.ax = null;
   srState.cmp = null;
   srState.focus.walk = null;
@@ -5824,11 +5977,14 @@ function srOnNavigated() {
   srOrderList.textContent = "";
   srLangList.textContent = "";
   srNtcList.textContent = "";
+  srReflowList.textContent = "";
+  srReflowShots.textContent = "";
+  srReflowShots.hidden = true;
   srCmpList.textContent = "";
   srCmpUrl.value = "";
   srCmpPrefill().catch(() => {});
   srAxList.textContent = "";
-  for (const id of ["srOrderStats", "srLangStats", "srNtcStats", "srCmpStats", "srAxStats"]) document.getElementById(id).textContent = "";
+  for (const id of ["srOrderStats", "srLangStats", "srNtcStats", "srReflowStats", "srCmpStats", "srAxStats"]) document.getElementById(id).textContent = "";
   srAddFindingsBtn.hidden = true;
   renderSrScore();
   if (flowRecording) flowJourney.pages.push({ at, label: "" }); // labelled by the next flow scan
@@ -5900,7 +6056,7 @@ async function srResolveUrl() {
 }
 
 function srHasData() {
-  return !!(srState.order || srState.lang || srState.ntc || srState.ax || srState.cmp || srState.live.log.length || srState.focus.log.length);
+  return !!(srState.order || srState.lang || srState.ntc || srState.reflow || srState.ax || srState.cmp || srState.live.log.length || srState.focus.log.length);
 }
 
 // Called when the 🔊 tab is shown: restore the snapshot saved for this URL unless the
@@ -5961,7 +6117,7 @@ function srUpdateBadge(sc) {
 function applySrStrings() {
   setTabLabel("sr", "i-speaker", t("tabSr"));
   document.getElementById("srIntro").textContent = t("srIntro");
-  const secKey = { order: "srSecOrder", live: "srSecLive", focus: "srSecFocus", lang: "srSecLang", ntc: "srSecNtc", cmp: "srSecCmp", ax: "srSecAx" };
+  const secKey = { order: "srSecOrder", live: "srSecLive", focus: "srSecFocus", lang: "srSecLang", ntc: "srSecNtc", reflow: "srSecReflow", cmp: "srSecCmp", ax: "srSecAx" };
   for (const key of Object.keys(SR_STEP_KEYS)) {
     const li = srStepEl(key);
     if (!li) continue;
@@ -5995,6 +6151,9 @@ function applySrStrings() {
   setLabel(srNtcBtn, "i-contrast", t("srNtc"));
   document.getElementById("srNtcNote").textContent = t("srNtcNote");
   if (srState.ntc) renderNtc(srState.ntc);
+  setLabel(srReflowBtn, "i-reflow", t("srReflow"));
+  document.getElementById("srReflowNote").textContent = srDebuggerAvailable ? t("srReflowNote") : t("srReflowUnavailable");
+  if (srState.reflow) renderReflow(srState.reflow);
   setLabel(srAxBtn, "i-tree", t("srAx"));
   document.getElementById("srAxNote").textContent = t("srAxNote");
   setLabel(document.getElementById("srLiveClearBtn"), "i-eraser", t("srClearLog"));
@@ -6295,6 +6454,37 @@ function srFixFor(code, ctx) {
           ? `${sel} {\n  background-color: ${cf.to};${tok}\n  /* or keep the fill and add a visible edge: */\n  border: 1px solid ${cf.to};\n}`
           : `${sel} {\n  border: 1px solid ${cf.to};${tok}\n}`;
       return F(css, `${kind === "icon" ? "The icon glyph" : kind === "background" ? "The control's fill (the only thing marking its edge)" : "The border"} is ${ctx.ntcRatio ? Number(ctx.ntcRatio).toFixed(2) + ":1" : "below 3:1"} against ${ctx.ntcBg || "the background"} — low-vision users cannot see where the control is or what state it is in (WCAG 1.4.11 Non-text Contrast). ${cf.to} reaches ${cf.ratio}:1${cf.token ? " and is the nearest UAE DLS token (" + cf.token + ")" : ""}; check hover, focus and checked states too.`);
+    }
+    case "reflow-horizontal-scroll": {
+      const sel = SR_ATTRV(html, "id") ? "#" + SR_ATTRV(html, "id") : SR_ATTRV(html, "class") ? "." + SR_ATTRV(html, "class").split(" ")[0] : tag;
+      const w = ctx.reflow && ctx.reflow.width;
+      const css = tag === "table"
+        ? `/* wrap the table: <div class="table-scroll"> … </div> — the wrapper scrolls, the page does not */\n.table-scroll {\n  overflow-x: auto;\n  max-width: 100%;\n}\n${sel} {\n  width: 100%;\n  max-width: 100%;\n}`
+        : /^(img|video|iframe|svg|canvas|picture)$/.test(tag)
+          ? `${sel} {\n  max-width: 100%;\n  height: auto;\n}\n/* iframes / embeds: */\n.embed { position: relative; aspect-ratio: 16 / 9; }\n.embed > iframe { position: absolute; inset: 0; width: 100%; height: 100%; }`
+          : `${sel} {\n  max-width: 100%;\n  min-width: 0;          /* let flex / grid children shrink */\n  box-sizing: border-box;\n}\n/* a row of cards or columns: */\n${sel} {\n  display: flex;\n  flex-wrap: wrap;\n}\n@media (max-width: 480px) {\n  ${sel} > * { flex: 1 1 100%; }\n}`;
+      return F(css, `${w ? w + " px wide" : "Wider than the viewport"} at 320 px${ctx.reflow && ctx.reflow.row ? " (a row of children that does not wrap)" : ""} — the page scrolls in two directions, so a user at 400 % zoom (or on a phone) has to pan sideways for every line of text (WCAG 1.4.10 Reflow). Fixed widths, min-width, oversized media and non-wrapping flex rows are the usual causes; only data tables, maps and diagrams may scroll sideways, and then inside their own box.`);
+    }
+    case "reflow-clipped-text":
+    case "reflow-clipped-text-200": {
+      const sel = SR_ATTRV(html, "id") ? "#" + SR_ATTRV(html, "id") : SR_ATTRV(html, "class") ? "." + SR_ATTRV(html, "class").split(" ")[0] : tag;
+      const d = ctx.reflow || {};
+      return F(`${sel} {\n  white-space: normal;        /* let the text wrap */\n  overflow-wrap: anywhere;    /* break long words and reference numbers */\n  min-width: 0;\n  max-width: 100%;\n}\n/* if one line is a must (a table cell, a tab label), keep the whole text reachable: */\n${sel} { text-overflow: ellipsis; }   /* + title="FULL_TEXT" or a "show more" toggle */`,
+        `${d.need ? "The text needs " + d.need + " px but the box is " + d.box + " px" : "The text is wider than its box"}${d.props ? " (" + d.props + ")" : ""} — ${code.endsWith("-200") ? "with 200 % text at the page's own width" : "at a 320 px viewport"} the rest is cut off and there is no way to read it${d.base ? "; it is already cut off at the normal width" : ""} (WCAG 1.4.4 Resize text / 1.4.10 Reflow). Let it wrap; keep nowrap only for things that must stay on one line and make sure the box grows with the text.`);
+    }
+    case "reflow-overlap":
+    case "reflow-overlap-200": {
+      const sel = SR_ATTRV(html, "id") ? "#" + SR_ATTRV(html, "id") : SR_ATTRV(html, "class") ? "." + SR_ATTRV(html, "class").split(" ")[0] : tag;
+      const sel2 = ctx.sel2 || "OTHER_CONTROL";
+      const d = ctx.reflow || {};
+      return F(`/* stack the two controls instead of positioning them on top of each other */\n@media (max-width: 480px) {\n  ${sel},\n  ${sel2} {\n    position: static;\n    display: block;\n    width: 100%;\n    margin-block: 4px;\n  }\n}\n/* or a wrapping row: */\n.actions {\n  display: flex;\n  flex-wrap: wrap;\n  gap: 8px;\n}\n.actions > * { min-width: 0; }`,
+        `${sel} overlaps ${sel2}${d.pct ? " by " + d.pct + " %" : ""} ${code.endsWith("-200") ? "with 200 % text at the page's own width" : "at a 320 px viewport"}${d.base ? " (and already at the normal width, so this is a layout bug rather than a zoom regression)" : ""} — the covered control cannot be clicked or seen, and a keyboard user has no idea where focus went (WCAG 1.4.10 Reflow / 1.4.4 Resize text). Absolute positioning and fixed widths do not reflow; let the row wrap or stack the controls below 480 px.`);
+    }
+    case "reflow-fixed-too-tall": {
+      const sel = SR_ATTRV(html, "id") ? "#" + SR_ATTRV(html, "id") : SR_ATTRV(html, "class") ? "." + SR_ATTRV(html, "class").split(" ")[0] : tag;
+      const d = ctx.reflow || {};
+      return F(`${sel} {\n  position: sticky;      /* scrolls with the content instead of covering it */\n  top: 0;\n  max-height: 40vh;\n  overflow: auto;\n}\n@media (max-width: 480px) {\n  ${sel} { position: static; }   /* or collapse the bar into a menu button */\n}`,
+        `The ${d.position || "fixed"} bar is ${d.height ? d.height + " px tall (" + d.pct + " % of the screen)" : "taller than a quarter of the screen"} at 320 px — at 400 % zoom it hides most of the page and the content underneath can never be scrolled into view (WCAG 1.4.10 Reflow). Cap its height, let it scroll, or make it static on narrow viewports.`);
     }
     case "html-lang-missing":
       return F(ctx.detected === "ar" ? '<html lang="ar" dir="rtl">' : ctx.detected === "latin" ? '<html lang="en">' : '<html lang="LANGUAGE_CODE">',
@@ -6696,6 +6886,13 @@ async function srRunAll() {
     try { await buildReadingOrder(); } catch (err) { console.error(err); }
     try { await runLangCheck(); } catch (err) { console.error(err); }
     try { await runNtcCheck(); } catch (err) { console.error(err); }
+    // Reflow needs chrome.debugger: only when the permission is already granted (requesting it would need a user gesture)
+    try {
+      const available = await bg("axTreeAvailable").catch(() => false);
+      const granted = available && (await bg("debuggerGranted").catch(() => false));
+      if (granted) await runReflowTest();
+      else if (!srState.reflow) { if (available) { srSetStep("reflow", "error"); srGrantNote(srReflowList, t("srReflowSkipped")); } else srEmpty(srReflowList, t("srReflowUnavailable")); }
+    } catch (err) { console.error(err); }
     try { await focusWalk(); } catch (err) { console.error(err); }
     try { await startLive(false); } catch (err) { console.error(err); }
     lastRunAt = Date.now();

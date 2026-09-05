@@ -6,7 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const bg = fs.readFileSync(root + "/background.js", "utf8") + "\nglobalThis.__axTreeTest = axTreeViaDebugger;\n";
+const bg = fs.readFileSync(root + "/background.js", "utf8") + "\nglobalThis.__axTreeTest = axTreeViaDebugger;\nglobalThis.__reflowTest = reflowTestViaDebugger;\n";
 const axe = fs.readFileSync(root + "/vendor/axe.min.js", "utf8");
 const stub = "globalThis.chrome = globalThis.chrome || { runtime: { onMessage: { addListener(){} } } };\n";
 const browser = await chromium.launch();
@@ -24,6 +24,21 @@ const store = {};
 const highlightAllCalls = []; // item counts sent by the ×N badge (must cover every instance)
 let dlsHighlightCalls = 0; // "Highlight all gaps" in the DLS toolbar
 const inPage = (fn) => target.evaluate(fn);
+// reflow / zoom: the panel render path gets a canned result covering every code (the real debugger run is asserted separately below)
+let debuggerGranted = true, reflowCalls = 0;
+const PIX = "data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACwAAAAAAQABAAACAkQBADs=";
+const REFLOW_CANNED = {
+  findings: [
+    { code: "reflow-horizontal-scroll", level: "serious", sel: "#reflowTable", tag: "table", html: '<table id="reflowTable" style="width:600px">', name: "Fee schedule", right: 640, width: 600, scrollWidth: 640, msgKey: "srReflowMsg", msgArgs: ["reflow-horizontal-scroll", { right: 640, width: 600, scrollWidth: 640 }] },
+    { code: "reflow-clipped-text", level: "moderate", sel: "#reflowClip", tag: "div", html: '<div id="reflowClip" style="white-space:nowrap">', name: "Establishment card", need: 408, box: 120, props: "overflow: hidden; white-space: nowrap", info: "overflow: hidden; white-space: nowrap", msgKey: "srReflowMsg", msgArgs: ["reflow-clipped-text", { need: 408, box: 120, props: "overflow: hidden; white-space: nowrap", zoom: false }] },
+    { code: "reflow-overlap", level: "serious", sel: "#reflowA", sel2: "#reflowB", tag: "button", html: '<button id="reflowA" type="button">', html2: '<button id="reflowB" type="button">', name: "Accept", pct: 40, info: "#reflowB", msgKey: "srReflowMsg", msgArgs: ["reflow-overlap", { pct: 40, sel2: "#reflowB", zoom: false }] },
+    { code: "reflow-fixed-too-tall", level: "moderate", sel: "#fixedBar", tag: "nav", html: '<nav id="fixedBar" class="site-nav">', name: "Menu", height: 260, pct: 33, position: "fixed", info: "fixed 260px", msgKey: "srReflowMsg", msgArgs: ["reflow-fixed-too-tall", { height: 260, pct: 33, position: "fixed", innerHeight: 800 }] },
+    { code: "reflow-clipped-text-200", level: "moderate", sel: "#reflowClip", tag: "div", html: '<div id="reflowClip" style="white-space:nowrap">', name: "Establishment card", need: 816, box: 120, props: "overflow: hidden; white-space: nowrap", info: "overflow: hidden; white-space: nowrap", msgKey: "srReflowMsg", msgArgs: ["reflow-clipped-text", { need: 816, box: 120, props: "overflow: hidden; white-space: nowrap", zoom: true }] },
+    { code: "reflow-overlap-200", level: "serious", sel: "#reflowA", sel2: "#reflowB", tag: "button", html: '<button id="reflowA" type="button">', html2: '<button id="reflowB" type="button">', name: "Accept", pct: 40, base: true, info: "#reflowB", msgKey: "srReflowMsg", msgArgs: ["reflow-overlap", { pct: 40, sel2: "#reflowB", zoom: true, base: true }] },
+  ],
+  summary: { baseWidth: 1280, baseHeight: 720, baseScrollWidth: 1280, scrollWidth: 640, scrollWidth200: 640, checked: 298, controls: 115, issues: 6, counts: { "reflow-horizontal-scroll": 1, "reflow-clipped-text": 1, "reflow-overlap": 1, "reflow-fixed-too-tall": 1, "reflow-clipped-text-200": 1, "reflow-overlap-200": 1 } },
+  shots: { base: PIX, narrow: PIX },
+};
 const ops = {
   settingsGet: async () => settings, settingsSet: async (m) => { Object.assign(settings, m.value); return true; },
   storeGet: async (m) => store[m.key] ?? null, storeSet: async (m) => { store[m.key] = m.value; return true; }, storeRemove: async (m) => { delete store[m.key]; return true; },
@@ -35,6 +50,7 @@ const ops = {
   focusStart: () => inPage(() => focusInstallInPage()), focusDrain: () => inPage(() => focusDrainInPage()), focusStop: () => inPage(() => focusStopInPage()),
   focusWalk: (m) => target.evaluate((n) => focusWalkInPage(n), m.maxSteps),
   axTreeAvailable: async () => true, axTree: () => globalThis.__axTreeTest(1),
+  debuggerGranted: async () => debuggerGranted, reflowTest: async () => { reflowCalls++; if (!debuggerGranted) throw new Error("permission-needed"); return REFLOW_CANNED; },
   dlsCheck: () => inPage(() => dlsCheckInPage(DLS_DATA)), dlsComponents: () => inPage(() => dlsComponentAuditInPage(DLS_DATA)), dlsHighlight: async () => { dlsHighlightCalls++; return 0; },
   srApply: (m) => target.evaluate(([s, p]) => srApplyInPage(s, p), [m.selector, m.patch]), srUndo: (m) => target.evaluate((s) => srUndoInPage(s), m.selector),
   pickStart: () => inPage(() => pickStartInPage()), pickCheck: () => inPage(() => pickCheckInPage()),
@@ -527,6 +543,71 @@ if (ntc.sels.join() !== "#ntcIcon,#ntcInput,#ntcToggle" || ntc.kinds.join() !== 
     !/\b3\b/.test(ntc.stats) || ntc.step !== "issues" || !/3/.test(ntc.stepState) || !ntc.title || !/border: 1px solid #[0-9a-f]{6}/.test(ntc.fixBorder) || !/svg \{\n  fill: #[0-9a-f]{6}/.test(ntc.fixIcon) || !/background-color: #[0-9a-f]{6}/.test(ntc.fixBg) ||
     !/DLS [a-z]+-\d+/.test(ntc.dlsFix) || ntc.exported !== 3 || !(ntc.expChecked >= 3) || !ntc.expFix || ntc.score !== 3 || !ntc.html || ntc.findings.length !== 3 || !ntc.findings.every((v) => /3:1/.test(v)) || !/3/.test(ntc.status) || !/3/.test(ntc.badge))
   errors.push("non-text contrast mismatch: " + JSON.stringify(ntc));
+// reflow / zoom (WCAG 1.4.10 / 1.4.4) — 1) the REAL debugger run through the CDP shim against the test page:
+// the 600px table scrolls horizontally, #reflowClip is cut off (at 320px and with 200% text), #reflowA/#reflowB overlap; the viewport and font size come back.
+// Negatives: nothing under #legitReflow (table in a scroll wrapper, icon button on its input, stretched-link card, collapsed accordion,
+// sticky aside, <pre> that scrolls, off-canvas drawer) may be reported; the non-wrapping #reflowRow is named once, not per <li>;
+// the 200 % pass runs at the page's own width and marks what already fails there (base) as moderate
+const reflowBefore = await target.evaluate(() => ({ cw: document.documentElement.clientWidth, font: document.documentElement.style.fontSize }));
+const reflowReal = await globalThis.__reflowTest(1);
+const reflowAfter = await target.evaluate(() => ({ cw: document.documentElement.clientWidth, font: document.documentElement.style.fontSize }));
+const rr = { codes: [...new Set(reflowReal.findings.map((f) => f.code))].sort(), sels: reflowReal.findings.map((f) => f.code + ":" + f.sel + (f.sel2 ? "+" + f.sel2 : "")),
+  sw: reflowReal.summary.scrollWidth, base: reflowReal.summary.baseWidth, shots: [reflowReal.shots.base.slice(0, 22), reflowReal.shots.narrow.slice(0, 22)], before: reflowBefore, after: reflowAfter, viewport: target.viewportSize(),
+  srOnly: reflowReal.findings.some((f) => /feedbackOk|extOk/.test(f.sel)), inlineWrap: reflowReal.findings.some((f) => f.code.startsWith("reflow-overlap") && !/^#reflow[AB]$/.test(f.sel)),
+  legit: reflowReal.findings.filter((f) => /legit/.test(f.sel + "|" + (f.sel2 || ""))).map((f) => f.code + ":" + f.sel + (f.sel2 ? "+" + f.sel2 : "")),
+  rowKids: reflowReal.findings.filter((f) => /#reflowRow >/.test(f.sel)).length, row: reflowReal.findings.find((f) => f.sel === "#reflowRow"),
+  base200: reflowReal.findings.filter((f) => f.code.endsWith("-200")).map((f) => f.code + ":" + f.base + ":" + f.level), preexisting: reflowReal.summary.preexisting };
+console.log("reflow (real debugger run):", JSON.stringify(rr));
+if (rr.codes.join() !== "reflow-clipped-text,reflow-clipped-text-200,reflow-horizontal-scroll,reflow-overlap,reflow-overlap-200" ||
+    !rr.sels.includes("reflow-horizontal-scroll:#reflowTable") || !rr.sels.includes("reflow-clipped-text:#reflowClip") || !rr.sels.includes("reflow-clipped-text-200:#reflowClip") ||
+    !rr.sels.includes("reflow-overlap:#reflowA+#reflowB") || !rr.sels.includes("reflow-overlap-200:#reflowA+#reflowB") || !(rr.sw >= 600) || rr.base !== reflowBefore.cw ||
+    !rr.shots.every((x) => x === "data:image/jpeg;base64") || rr.after.cw !== rr.before.cw || rr.after.font !== rr.before.font || rr.viewport.width !== 1280 || rr.srOnly || rr.inlineWrap)
+  errors.push("reflow real-run mismatch: " + JSON.stringify(rr));
+if (rr.legit.length || rr.rowKids || !rr.row || !rr.row.row || !(rr.row.right >= 600) || !(rr.row.msgArgs && rr.row.msgArgs[1] && rr.row.msgArgs[1].row) ||
+    rr.base200.join() !== "reflow-clipped-text-200:true:moderate,reflow-overlap-200:true:moderate" || rr.preexisting !== 4 ||
+    !reflowReal.findings.every((f) => f.code.endsWith("-200") ? f.base : true))
+  errors.push("reflow negatives / grouping / base labelling mismatch: " + JSON.stringify({ legit: rr.legit, rowKids: rr.rowKids, row: rr.row && rr.row.sel, base200: rr.base200, preexisting: rr.preexisting }));
+// 2) the panel render path with the canned result (every code): rows, fixes, screenshots, score, exports, filter codes
+await panel.evaluate(() => { document.getElementById("srReflowSection").open = true; });
+await panel.click("#srReflowBtn"); await panel.waitForTimeout(800);
+const reflow = await panel.evaluate(() => {
+  const r = srState.reflow;
+  const rows = [...document.querySelectorAll("#srReflowList .sr-row")];
+  const exp = srResultsForExport().reflow;
+  const json = srExportWithoutShots(srResultsForExport());
+  const fixOf = (code) => { const i = r.findings.find((x) => x.code === code); return srFixFor(i.code, srReflowFixCtx(i)); };
+  const sc = srScoreCompute();
+  const box = document.getElementById("srFilterInput");
+  box.value = "reflow-overlap-200"; box.dispatchEvent(new Event("input")); applySrFilter();
+  const filtered = [...document.querySelectorAll("#srReflowList .sr-row:not([hidden])")].length;
+  box.value = ""; box.dispatchEvent(new Event("input")); applySrFilter();
+  return {
+    rows: rows.length, codes: rows.map((x) => x.dataset.srCodes), fixes: document.querySelectorAll("#srReflowList .sr-fix").length, imgs: [...document.querySelectorAll("#srReflowShots img")].map((i) => i.src.slice(0, 5) + "|" + i.alt),
+    captions: [...document.querySelectorAll("#srReflowShots figcaption")].map((c) => c.textContent), stats: srReflowStats.textContent, shotsHidden: srReflowShots.hidden,
+    step: document.querySelector('#srSteps .step[data-step="6"]').dataset.state, stepState: document.querySelector('#srSteps .step[data-step="6"] .step-state').textContent, title: document.querySelector("#srReflowSection .step-title").textContent,
+    cmpStep: document.querySelector("#srCmpSection").closest(".step").dataset.step, axStep: document.querySelector("#srAxSection").closest(".step").dataset.step,
+    msgs: rows.map((x) => x.querySelector(".sr-issue").textContent),
+    fixScroll: fixOf("reflow-horizontal-scroll").snippet, fixClip: fixOf("reflow-clipped-text").snippet, fixClip200: fixOf("reflow-clipped-text-200").note, fixOverlap: fixOf("reflow-overlap").snippet, fixOverlap200: fixOf("reflow-overlap-200").note, fixTall: fixOf("reflow-fixed-too-tall").snippet,
+    exported: exp && exp.findings.length, expShots: exp && exp.shots.base.slice(0, 5) + exp.shots.narrow.slice(0, 5), expFix: exp && exp.findings.every((i) => i.fix && i.fix.snippet && i.msg), jsonShots: json.reflow.shots, jsonFindings: json.reflow.findings.length,
+    score: sc.breakdown.reflow, penalty: sc.penalty, sections: Object.keys(sc.breakdown), html: srSectionHtml(),
+    findings: A11yFixes.srFindings(srResultsForExport()).filter((f) => f.section === "reflow").map((f) => f.sectionLabel + "|" + f.verify), filtered, status: document.getElementById("status").textContent,
+  };
+});
+console.log("reflow (panel):", JSON.stringify({ ...reflow, html: reflow.html.length, msgs: reflow.msgs.length }));
+if (reflow.rows !== 6 || reflow.fixes !== 6 || reflow.imgs.join() !== "data:|" + reflow.captions[0] + ",data:|" + reflow.captions[1] || reflow.shotsHidden || !/1280/.test(reflow.captions[0]) || !/320/.test(reflow.captions[1]) ||
+    !/640/.test(reflow.stats) || !/\b6\b/.test(reflow.stats) || reflow.step !== "issues" || !/6/.test(reflow.stepState) || !reflow.title || reflow.cmpStep !== "7" || reflow.axStep !== "8" ||
+    reflow.codes.join() !== "reflow-horizontal-scroll width-320,reflow-clipped-text width-320,reflow-overlap width-320,reflow-fixed-too-tall width-320,reflow-clipped-text-200 zoom-200,reflow-overlap-200 zoom-200" ||
+    !reflow.msgs.every((m) => /640|408|816|40|260/.test(m)) || !reflow.msgs.some((m) => /normal viewport|بالعرض الطبيعي/.test(m)) || !/layout bug/.test(reflow.fixOverlap200) || !/overflow-x: auto/.test(reflow.fixScroll) || !/max-width: 100%/.test(reflow.fixScroll) || !/white-space: normal/.test(reflow.fixClip) || !/overflow-wrap: anywhere/.test(reflow.fixClip) ||
+    !/200 % text/.test(reflow.fixClip200) || !/@media \(max-width: 480px\)/.test(reflow.fixOverlap) || !/#reflowB/.test(reflow.fixOverlap) || !/flex-wrap: wrap/.test(reflow.fixOverlap) || !/position: sticky/.test(reflow.fixTall) || !/max-height: 40vh/.test(reflow.fixTall) ||
+    reflow.exported !== 6 || reflow.expShots !== "data:data:" || !reflow.expFix || reflow.jsonShots !== undefined || reflow.jsonFindings !== 6 || reflow.score !== 6 || !reflow.sections.includes("reflow") ||
+    !/Reflow &amp; zoom \(WCAG 1\.4\.10/.test(reflow.html) || (reflow.html.match(/<img src="data:image\/gif/g) || []).length !== 2 || !/reflow: 6/.test(reflow.html) ||
+    reflow.findings.length !== 6 || !reflow.findings.every((v) => /^Reflow & zoom\|.*400%/.test(v)) || !reflow.findings.some((v) => /#reflowA.*#reflowB/.test(v)) || reflow.filtered !== 1 || !/6/.test(reflow.status))
+  errors.push("reflow panel mismatch: " + JSON.stringify({ ...reflow, html: reflow.html.length }));
+// score: 6 canned rows, but the 320 px and 200 % rows of one element count once → 4 groups = 2 serious (5) + 2 moderate (2) = 14 (under the 25 cap);
+// reflow penalty is the difference to the same score without the section
+const reflowPenalty = await panel.evaluate(() => { const withR = srScoreCompute().penalty; const keep = srState.reflow; srState.reflow = null; const without = srScoreCompute().penalty; srState.reflow = keep; return withR - without; });
+console.log("reflow penalty:", reflowPenalty);
+if (reflowPenalty !== 14) errors.push("reflow penalty mismatch: " + reflowPenalty);
 // bilingual comparison: compare the page against itself → 0 differences
 await panel.evaluate(() => { document.getElementById("srCmpSection").open = true; }); // step 5 is collapsed by default
 await panel.fill("#srCmpUrl", await target.url()); await panel.click("#srCmpBtn"); await panel.waitForTimeout(1500);

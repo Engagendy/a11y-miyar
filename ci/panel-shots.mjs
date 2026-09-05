@@ -1,7 +1,7 @@
 // Screenshots of the panel in typical states, for visual review (9 states):
 //   1-initial (Overview first-run hero), 2-after-scan (Automated), 3-sr-empty, 4-sr-order,
 //   5-manual, 6-dls (report), 8-overview (after everything ran), 9-export-menu (open Export menu),
-//   7-narrow (700px, Automated), 14-scan-settings (presets popover open over the Automated tab), 16-sr-ntc (non-text contrast rows), 17-sr-group-label (form group labelling rows).
+//   7-narrow (700px, Automated), 14-scan-settings (presets popover open over the Automated tab), 16-sr-ntc (non-text contrast rows), 17-sr-group-label (form group labelling rows), 19-sr-reflow (reflow / zoom screenshots + rows).
 //   cd ci && node panel-shots.mjs [en|ar] [light|dark] [outDir]
 // Headless smoke test for the 🔊 Screen reader tab: drives panel.html against
 // test-page.html with a stubbed background (no extension install needed).
@@ -11,7 +11,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const bg = fs.readFileSync(root + "/background.js", "utf8") + "\nglobalThis.__axTreeTest = axTreeViaDebugger;\n";
+const bg = fs.readFileSync(root + "/background.js", "utf8") + "\nglobalThis.__axTreeTest = axTreeViaDebugger;\nglobalThis.__reflowTest = reflowTestViaDebugger;\n";
 const axe = fs.readFileSync(root + "/vendor/axe.min.js", "utf8");
 const stub = "globalThis.chrome = globalThis.chrome || { runtime: { onMessage: { addListener(){} } } };\n";
 const browser = await chromium.launch();
@@ -37,7 +37,7 @@ const ops = {
   liveStart: () => inPage(() => liveInstallInPage()), liveDrain: () => inPage(() => liveDrainInPage()), liveStop: () => inPage(() => liveStopInPage()),
   focusStart: () => inPage(() => focusInstallInPage()), focusDrain: () => inPage(() => focusDrainInPage()), focusStop: () => inPage(() => focusStopInPage()),
   focusWalk: (m) => target.evaluate((n) => focusWalkInPage(n), m.maxSteps),
-  axTreeAvailable: async () => true, axTree: () => globalThis.__axTreeTest(1),
+  axTreeAvailable: async () => true, axTree: () => globalThis.__axTreeTest(1), debuggerGranted: async () => true, reflowTest: () => globalThis.__reflowTest(1),
   dlsCheck: () => inPage(() => dlsCheckInPage(DLS_DATA)), dlsComponents: () => inPage(() => dlsComponentAuditInPage(DLS_DATA)), dlsHighlight: async () => 0,
   srApply: (m) => target.evaluate(([s, p]) => srApplyInPage(s, p), [m.selector, m.patch]), srUndo: (m) => target.evaluate((s) => srUndoInPage(s), m.selector),
   highlight: async () => true, highlightAll: async (m) => { highlightAllCalls.push((m.items || []).length); return true; }, clearHighlights: async () => true, staleInstall: async () => true, staleCheck: async () => false, domCount: async () => 50,
@@ -141,6 +141,11 @@ await panel.evaluate(() => { document.getElementById("srFocusSection").open = fa
 await panel.click("#srNtcBtn"); await panel.waitForTimeout(800);
 await panel.evaluate(() => { const d = document.querySelector("#srNtcList .sr-row details"); if (d) d.open = true; document.getElementById("srNtcSection").scrollIntoView(); });
 await shot("16-sr-ntc");
+// reflow / zoom: the real debugger run (320 px + 200 % text) — screenshots side by side, the table/clip/overlap rows, first fix open
+await panel.evaluate(() => { document.getElementById("srNtcSection").open = false; document.getElementById("srReflowSection").open = true; });
+await panel.click("#srReflowBtn"); await panel.waitForTimeout(2500);
+await panel.evaluate(() => { const d = document.querySelector("#srReflowList .sr-row details"); if (d) d.open = true; document.getElementById("srReflowSection").scrollIntoView(); });
+await shot("19-sr-reflow");
 await panel.click("#tabs button[data-view='manual']"); await panel.waitForTimeout(300);
 await shot("5-manual");
 await panel.click("#tabs button[data-view='dls']"); await panel.click("#dlsBtn"); await panel.waitForTimeout(1500);

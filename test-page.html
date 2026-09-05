@@ -280,5 +280,27 @@
   <iframe title="embedded test frame" style="margin-top:20px;width:400px;height:120px"
     srcdoc="&lt;img src='x.png'&gt;&lt;input type='text' placeholder='email'&gt;&lt;button&gt;&lt;/button&gt;">
   </iframe>
+
+  <!-- reflow / zoom (WCAG 1.4.10 / 1.4.4): a 600px fixed-width table (horizontal scroll at 320px), a nowrap label
+       clipped by overflow hidden, two absolutely positioned buttons that overlap — visible, at the end so nothing else shifts -->
+  <section id="reflowFixtures" aria-label="Reflow fixtures" style="margin-top:20px">
+    <table id="reflowTable" style="width:600px; border:1px solid #999; border-collapse:collapse"><caption>Fee schedule</caption>
+      <tr><th>Service</th><th>Fee</th><th>Duration</th></tr><tr><td>Work permit</td><td>AED 300</td><td>2 days</td></tr></table>
+    <div id="reflowClip" style="width:120px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; border:1px solid #999">Establishment card renewal application reference number</div>
+    <div style="position:relative; height:40px; width:200px"><button id="reflowA" type="button" style="position:absolute; left:0; top:0; width:120px">Accept</button><button id="reflowB" type="button" style="position:absolute; left:60px; top:4px; width:120px">Decline</button></div>
+    <!-- a non-wrapping row: reported once as the row (#reflowRow), not one line per item -->
+    <ul id="reflowRow" style="display:flex; list-style:none; margin:8px 0; padding:0"><li style="min-width:150px">Services</li><li style="min-width:150px">Establishments</li><li style="min-width:150px">Work permits</li><li style="min-width:150px">Contact</li></ul>
+  </section>
+  <!-- legit reflow patterns (WCAG 1.4.10 exceptions / intentional layering): none of these may be reported -->
+  <section id="legitReflow" aria-label="Legit reflow fixtures" style="margin-top:20px">
+    <div style="overflow-x:auto; max-width:100%"><table id="legitTable" style="width:600px; border:1px solid #999"><caption>Scrolls in its own box</caption><tr><th>Service</th><th>Fee</th><th>Duration</th></tr><tr><td>Visa</td><td>AED 100</td><td>1 day</td></tr></table></div>
+    <div style="position:relative; width:200px; margin-top:8px"><label for="legitQ" style="display:block">Search</label><input id="legitQ" type="search" style="width:100%; box-sizing:border-box; padding-inline-end:36px"><button id="legitQBtn" type="button" aria-label="Search" style="position:absolute; inset-inline-end:2px; bottom:2px; width:30px">&#8981;</button></div>
+    <div id="legitCard" style="position:relative; width:200px; padding:8px; margin-top:8px; border:1px solid #999"><h3 style="margin:0; font-size:1em">Stretched-link card</h3><p>Summary text.</p><a href="#" style="position:absolute; inset:0" aria-label="Open the card"></a><button id="legitFav" type="button" style="position:absolute; top:4px; inset-inline-end:4px; z-index:1">Save</button></div>
+    <div id="legitAcc" style="max-height:0; overflow:hidden"><a href="#">Collapsed link one</a><br><a href="#">Collapsed link two</a></div>
+    <button id="legitAccBtn" type="button" style="margin-top:8px">Expand section</button>
+    <aside id="legitSticky" style="position:sticky; top:16px; height:300px; overflow:auto; border:1px solid #999; margin-top:8px"><p>Sticky table of contents (scrolls with the content).</p></aside>
+    <pre id="legitPre" style="overflow:auto; max-width:200px; border:1px solid #999">const establishmentCardRenewalReference = "MOHRE-2026-000123456789";</pre>
+    <div id="legitDrawer" style="position:fixed; top:0; right:0; width:280px; height:100%; transform:translateX(100%); background:#fff; border-inline-start:1px solid #999"><p>Off-canvas drawer (closed).</p></div>
+  </section>
 </body>
 </html>

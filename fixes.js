@@ -527,6 +527,7 @@ function srVerifyStep(code, ctx) {
   var name = ctx.name ? "'" + ctx.name + "'" : "'<name>'";
   var text = ctx.text ? "'" + String(ctx.text).slice(0, 50) + "'" : "the update";
   var snip = ctx.snippet ? "'" + String(ctx.snippet).slice(0, 40) + "'" : "the wrapped span";
+  var sel = ctx.sel ? String(ctx.sel).slice(0, 80) : "";
   switch (code) {
     case "no-name":
       return "Tab to the control; expected announcement: " + name + ", " + role + ".";
@@ -643,6 +644,16 @@ function srVerifyStep(code, ctx) {
       return "Read the sentence with VoiceOver/NVDA; the voice must switch for " + snip + ".";
     case "nontext-contrast":
       return "Check the " + (ctx.info || "control's border, background or icon") + " with a contrast picker against the surrounding background; it must reach 3:1 (also in every state: hover, checked, focused).";
+    case "reflow-horizontal-scroll":
+      return "Zoom to 400% (Ctrl/⌘ and +) or narrow the window to 320 px — no horizontal scrollbar, no clipped text, controls do not overlap; " + (sel || "the element") + " must fit inside the viewport (a data table may scroll inside its own box only).";
+    case "reflow-clipped-text":
+    case "reflow-clipped-text-200":
+      return "Zoom to 400% (Ctrl/⌘ and +) and set the browser's text size to 200% — every word in " + (sel || "the element") + " must be readable: nothing cut off, no ellipsis without a way to the full text, no clipped text, no horizontal scrollbar.";
+    case "reflow-overlap":
+    case "reflow-overlap-200":
+      return "Zoom to 400% (Ctrl/⌘ and +) and set text size to 200% — no horizontal scrollbar, no clipped text, controls do not overlap: " + (sel || "the control") + " and " + (ctx.info || "the other control") + " must both be fully visible and clickable.";
+    case "reflow-fixed-too-tall":
+      return "Zoom to 400% (Ctrl/⌘ and +) on a laptop screen — the fixed bar " + (sel || "") + " must leave most of the screen for content and every part of the page must still scroll into view; no horizontal scrollbar, no clipped text, controls do not overlap.";
     case "cmp-missing":
       return "Open both language versions; the " + role + " must exist and be reachable on each.";
     case "cmp-live":
@@ -663,7 +674,7 @@ function srVerifyStep(code, ctx) {
   }
 }
 
-var SR_SECTION_LABEL = { order: "Reading order", live: "Live regions", focus: "Focus trace", lang: "Language", ntc: "Non-text contrast", journey: "Journey", cmp: "Bilingual comparison", ax: "Browser accessibility tree" };
+var SR_SECTION_LABEL = { order: "Reading order", live: "Live regions", focus: "Focus trace", lang: "Language", ntc: "Non-text contrast", reflow: "Reflow & zoom", journey: "Journey", cmp: "Bilingual comparison", ax: "Browser accessibility tree" };
 
 function srLevelOf(item) {
   if (item.level) return item.level;
@@ -732,6 +743,7 @@ function srFindings(sr) {
   if (sr.focusTrace) nodeList("focus", sr.focusTrace.issues);
   if (sr.language) (sr.language.issues || []).forEach(function (i) { add("lang", i.type, i, i.msg || i.type); });
   if (sr.nonTextContrast) (sr.nonTextContrast.issues || []).forEach(function (i) { add("ntc", i.code || "nontext-contrast", i, i.msg || "non-text contrast below 3:1"); });
+  if (sr.reflow) (sr.reflow.findings || []).forEach(function (i) { add("reflow", i.code || "reflow", i, i.msg || "does not reflow at 320 px"); });
   if (sr.bilingual) (sr.bilingual.differences || []).forEach(function (d) { add("cmp", d.code, d, d.msg || d.kind); });
   if (sr.journey) {
     (sr.journey.gaps || []).forEach(function (g) {

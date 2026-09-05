@@ -3008,6 +3008,299 @@ async function axTreeViaDebugger(tabId) {
   }
 }
 
+/* ---------- reflow / zoom test via the debugger protocol (Chromium, opt-in) ----------
+   WCAG 1.4.10 Reflow / 1.4.4 Resize text: the tab is rendered at a 320 px viewport (what 400 %
+   zoom on a 1280 px screen gives) and then, back at its normal width, with 200 % text;
+   REFLOW_CHECK_FN runs in the page (Runtime.evaluate of a self-contained source string — no
+   closures) and lists what breaks. A first pass at the normal width supplies the "already
+   broken before zooming" keys so pre-existing overlaps / cut-offs are labelled and demoted. */
+
+const REFLOW_CHECK_FN = `(function (opts) {
+  const LIMIT = opts.limit || 322;
+  const suffix = opts.suffix || "";
+  const baseKeys = new Set(opts.baseKeys || []);
+  const scrollWidth = document.documentElement.scrollWidth;
+  const clientWidth = document.documentElement.clientWidth;
+  if (!document.body) return { scrollWidth, clientWidth, innerHeight, checked: 0, controls: 0, findings: [], keys: [] };
+  const cssPath = (el) => {
+    const parts = [];
+    let cur = el;
+    for (let depth = 0; cur && cur.nodeType === 1 && depth < 6; depth++) {
+      if (cur.id) { parts.unshift("#" + CSS.escape(cur.id)); break; }
+      const tag = cur.tagName.toLowerCase();
+      if (tag === "body" || tag === "html") { parts.unshift(tag); break; }
+      const parent = cur.parentElement;
+      if (!parent) { parts.unshift(tag); break; }
+      parts.unshift(tag + ":nth-child(" + ([...parent.children].indexOf(cur) + 1) + ")");
+      cur = parent;
+    }
+    return parts.join(" > ");
+  };
+  const short = (el) => {
+    let h = "";
+    try { h = el.cloneNode(false).outerHTML; } catch (_) { h = "<" + el.tagName.toLowerCase() + ">"; }
+    return h.length > 160 ? h.slice(0, 157) + "…" : h;
+  };
+  const SKIP = /^(script|style|link|meta|noscript|template|head|title|br|wbr|path|g|circle|rect|line|polygon|use|defs|symbol|clipPath|mask|stop|tspan)$/i;
+  const styles = new Map();
+  const cs = (el) => { let s = styles.get(el); if (!s) { s = getComputedStyle(el); styles.set(el, s); } return s; };
+  const OVF = /^(hidden|clip|auto|scroll)$/;
+  const HARD = /^(hidden|clip)$/;
+  const box = (L, T, R, B) => (R - L > 0 && B - T > 0 ? { left: L, top: T, right: R, bottom: B, width: R - L, height: B - T } : null);
+  // the part of a box a user can actually see right now: its own rect cut down by every ancestor that
+  // clips or scrolls its overflow (a collapsed accordion, a carousel track, a table-scroll wrapper), and
+  // nothing at all under a display:none / opacity:0 ancestor. Fixed boxes escape their ancestors.
+  const seen = new Map();
+  const visRect = (el) => {
+    if (seen.has(el)) return seen.get(el);
+    let out = null;
+    const s = cs(el);
+    if (s.display !== "none" && s.visibility !== "hidden" && s.opacity !== "0") {
+      const r = el.getBoundingClientRect();
+      let L = r.left, T = r.top, R = r.right, B = r.bottom;
+      for (let a = el.parentElement; a && a !== document.documentElement && a !== document.body && R > L && B > T; a = a.parentElement) {
+        const as = cs(a);
+        if (as.display === "none" || as.opacity === "0") { R = L; break; }
+        if (s.position === "fixed") continue;
+        const cx = OVF.test(as.overflowX), cy = OVF.test(as.overflowY);
+        if (!cx && !cy) continue;
+        const ar = a.getBoundingClientRect();
+        if (cx) { L = Math.max(L, ar.left); R = Math.min(R, ar.right); }
+        if (cy) { T = Math.max(T, ar.top); B = Math.min(B, ar.bottom); }
+      }
+      out = box(L, T, R, B);
+    }
+    seen.set(el, out);
+    return out;
+  };
+  const visible = (el) => !!visRect(el);
+  const all = [];
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
+  for (let n = walker.nextNode(); n && all.length < 4000; n = walker.nextNode()) if (!SKIP.test(n.tagName)) all.push(n);
+  const findings = [];
+  const keys = [];
+  const item = (code, level, el, extra) => Object.assign({ code: code + suffix, level, sel: cssPath(el), tag: el.tagName.toLowerCase(), html: short(el), name: (el.getAttribute("aria-label") || el.getAttribute("alt") || (el.textContent || "")).replace(/\\s+/g, " ").trim().slice(0, 60) }, extra || {});
+  // 1. horizontal scrolling at 320 px: the top-most visible boxes that stick out of the viewport.
+  //    Boxes inside a wrapper that scrolls / clips within the viewport are the wrapper's business
+  //    (1.4.10 lets data tables, maps and code scroll in their own box); off-canvas drawers and a
+  //    row of non-wrapping siblings are reported once, as the row.
+  if (opts.horizontal !== false && scrollWidth > LIMIT) {
+    const flagged = new Set();
+    const sticksOut = (el) => { const r = visRect(el); return !!r && r.right > LIMIT; };
+    // entirely outside the viewport because it (or an ancestor) is positioned / transformed there: a closed drawer, not page content
+    const offCanvas = (el, r) => {
+      if (r.left < clientWidth) return false;
+      for (let a = el; a && a !== document.body; a = a.parentElement) if (/^(fixed|absolute)$/.test(cs(a).position) || cs(a).transform !== "none") return true;
+      return false;
+    };
+    let n = 0;
+    for (const el of all) {
+      if (n >= 30) break;
+      let skip = false;
+      for (let a = el.parentElement; a && !skip; a = a.parentElement) if (flagged.has(a)) skip = true;
+      if (skip) continue;
+      const r = visRect(el);
+      if (!r) continue;
+      // two or more children on one line that stick out (nav items, cards, columns): the row is the cause
+      const kids = [];
+      for (const k of el.children) if (!SKIP.test(k.tagName) && sticksOut(k) && !offCanvas(k, visRect(k))) kids.push(visRect(k));
+      const row = kids.length >= 2 && kids.some((a, i) => kids.some((b, j) => i !== j && a.top < b.bottom && b.top < a.bottom));
+      if (!row && (r.right <= LIMIT || offCanvas(el, r))) continue;
+      flagged.add(el);
+      n++;
+      const right = Math.round(row ? Math.max(r.right, ...kids.map((k) => k.right)) : r.right);
+      const width = Math.round(row ? Math.max(r.width, el.scrollWidth) : r.width);
+      findings.push(item("reflow-horizontal-scroll", "serious", el, { right, width, scrollWidth, limit: 320, row, msgKey: "srReflowMsg", msgArgs: ["reflow-horizontal-scroll", { right, width, scrollWidth, row }] }));
+    }
+  }
+  // 2. text cut off: a box with its own text, wider content than box, and a hidden/clip overflow that
+  //    hides the rest — its own, or an ancestor's when the text does not wrap. Boxes that scroll in
+  //    place (overflow auto/scroll: <pre>, code, data cells) are not cut off.
+  let clipped = 0;
+  for (const el of all) {
+    if (clipped >= 30) break;
+    let hasText = false;
+    for (const c of el.childNodes) if (c.nodeType === 3 && c.nodeValue.trim()) { hasText = true; break; }
+    if (!hasText || !visible(el)) continue;
+    if (el.clientWidth <= 2 || el.clientHeight <= 2) continue; // .sr-only / visually-hidden boxes clip on purpose
+    if (el.scrollWidth <= el.clientWidth + 2) continue;
+    const s = cs(el);
+    if (/^(auto|scroll)$/.test(s.overflowX)) continue;
+    const props = [];
+    let cut = HARD.test(s.overflowX);
+    if (cut) props.push("overflow: " + s.overflowX);
+    if (/^(nowrap|pre)$/.test(s.whiteSpace)) props.push("white-space: " + s.whiteSpace);
+    if (s.textOverflow === "ellipsis") props.push("text-overflow: ellipsis");
+    if (!cut) {
+      if (!/^(nowrap|pre)$/.test(s.whiteSpace)) continue;
+      const full = el.getBoundingClientRect();
+      const rtl = s.direction === "rtl";
+      for (let a = el.parentElement; a && a !== document.documentElement && a !== document.body; a = a.parentElement) {
+        const as = cs(a);
+        if (!HARD.test(as.overflowX)) continue;
+        const ar = a.getBoundingClientRect();
+        if (rtl ? full.right - el.scrollWidth < ar.left - 2 : full.left + el.scrollWidth > ar.right + 2) { cut = true; props.unshift("overflow: " + as.overflowX + " on " + cssPath(a)); }
+        break;
+      }
+      if (!cut) continue;
+    }
+    clipped++;
+    const key = "clip|" + cssPath(el);
+    keys.push(key);
+    const base = baseKeys.has(key);
+    findings.push(item("reflow-clipped-text", "moderate", el, { need: el.scrollWidth, box: el.clientWidth, props: props.join("; "), info: props.join("; "), base, msgKey: "srReflowMsg", msgArgs: ["reflow-clipped-text", { need: el.scrollWidth, box: el.clientWidth, props: props.join("; "), zoom: !!suffix, base }] }));
+  }
+  // 3. overlapping controls: visible focusable/interactive boxes whose visible rects intersect by > 20 % of
+  //    the smaller one AND where the pointer really lands on the other control at one of the two centres
+  //    (elementFromPoint) — an icon button sitting on the end of its input, or a favourite button on a
+  //    stretched-link card, is layering on purpose and stays clickable.
+  const CTRL = "a[href], button, input:not([type=hidden]), select, textarea, summary, [tabindex], [role=button], [role=link], [role=checkbox], [role=radio], [role=switch], [role=tab], [role=menuitem], [role=option], [role=combobox], [role=slider]";
+  const ctrls = [];
+  const clipTo = (r, c) => box(Math.max(r.left, c.left), Math.max(r.top, c.top), Math.min(r.right, c.right), Math.min(r.bottom, c.bottom));
+  for (const el of document.body.querySelectorAll(CTRL)) {
+    if (ctrls.length >= 300) break;
+    if (SKIP.test(el.tagName)) continue;
+    const clip = visRect(el);
+    if (!clip) continue;
+    // per-line boxes: an inline link wrapped over two lines must not "overlap" the link that follows it
+    const rects = [...el.getClientRects()].map((r) => clipTo(r, clip)).filter((r) => r && r.width >= 4 && r.height >= 4);
+    if (!rects.length) continue;
+    ctrls.push({ el, rects, clip, r0: el.getBoundingClientRect() });
+  }
+  const overlapPct = (A, B) => {
+    let best = 0;
+    for (const a of A) for (const b of B) {
+      const w = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+      const h = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+      if (w <= 0 || h <= 0) continue;
+      const smaller = Math.min(a.width * a.height, b.width * b.height);
+      if (smaller > 0) best = Math.max(best, (w * h) / smaller);
+    }
+    return best;
+  };
+  const sx0 = scrollX, sy0 = scrollY;
+  // is control y what the pointer hits at the centre of control x? (the window is scrolled so the point is on screen)
+  const coveredBy = (x, y) => {
+    // the centre in the current frame: the clipped rect was measured at the original scroll, so shift it by how far the box moved since
+    const pt = () => { const r1 = x.el.getBoundingClientRect(); return [x.clip.left + x.clip.width / 2 + (r1.left - x.r0.left), x.clip.top + x.clip.height / 2 + (r1.top - x.r0.top)]; };
+    let [px, py] = pt();
+    if (px < 0 || py < 0 || px >= clientWidth || py >= innerHeight) { scrollTo(scrollX + px - clientWidth / 2, scrollY + py - innerHeight / 2); [px, py] = pt(); }
+    const hit = document.elementFromPoint(px, py);
+    return !!hit && (hit === y.el || y.el.contains(hit));
+  };
+  let overlaps = 0;
+  for (let i = 0; i < ctrls.length && overlaps < 20; i++) {
+    for (let j = i + 1; j < ctrls.length && overlaps < 20; j++) {
+      const a = ctrls[i], b = ctrls[j];
+      if (a.el.contains(b.el) || b.el.contains(a.el)) continue;
+      const ratio = overlapPct(a.rects, b.rects);
+      if (ratio <= 0.2) continue;
+      if (!coveredBy(a, b) && !coveredBy(b, a)) continue;
+      overlaps++;
+      const pct = Math.round(ratio * 100);
+      const key = "overlap|" + cssPath(a.el) + "|" + cssPath(b.el);
+      keys.push(key);
+      const base = baseKeys.has(key);
+      findings.push(item("reflow-overlap", base ? "moderate" : "serious", a.el, { sel2: cssPath(b.el), html2: short(b.el), pct, base, info: cssPath(b.el), msgKey: "srReflowMsg", msgArgs: ["reflow-overlap", { pct, sel2: cssPath(b.el), zoom: !!suffix, base }] }));
+    }
+  }
+  if (scrollX !== sx0 || scrollY !== sy0) scrollTo(sx0, sy0);
+  // 4. fixed bars taller than a quarter of the screen (on screen, not a dialog). Sticky boxes scroll
+  //    with the content and are only counted when they sit at their stuck offset (a sticky header).
+  let tall = 0;
+  if (opts.horizontal !== false) for (const el of all) {
+    if (tall >= 10) break;
+    const s = cs(el);
+    if (s.position !== "fixed" && s.position !== "sticky") continue;
+    if (!visible(el)) continue;
+    const r = el.getBoundingClientRect();
+    if (r.height <= innerHeight * 0.25) continue;
+    if (r.right <= 0 || r.left >= clientWidth || r.bottom <= 0 || r.top >= innerHeight) continue; // off-canvas drawer
+    if (el.closest("dialog, [role=dialog], [role=alertdialog], [aria-modal=true], [inert]")) continue; // a full-screen dialog is the content
+    if (s.position === "sticky" && (s.top === "auto" || Math.abs(r.top - parseFloat(s.top)) > 1)) continue;
+    tall++;
+    const pct = Math.round(r.height / innerHeight * 100);
+    findings.push(item("reflow-fixed-too-tall", "moderate", el, { height: Math.round(r.height), pct, position: s.position, info: s.position + " " + Math.round(r.height) + "px", msgKey: "srReflowMsg", msgArgs: ["reflow-fixed-too-tall", { height: Math.round(r.height), pct, position: s.position, innerHeight }] }));
+  }
+  return { scrollWidth, clientWidth, innerHeight, checked: all.length, controls: ctrls.length, findings, keys };
+})`;
+
+// Every protocol round trip is bounded: a page paused at a breakpoint (the panel lives inside
+// DevTools) or a hung Runtime.evaluate must not leave the tab at 320 px / 200 % text with the
+// debugger attached — the deadline rejects, the finally block restores and detaches.
+const REFLOW_STEP_MS = 15000;
+const reflowDeadline = (p, what) => new Promise((resolve, reject) => {
+  const tm = setTimeout(() => reject(new Error("The reflow test timed out (" + what + ") — is the page paused at a breakpoint? The page has been restored.")), REFLOW_STEP_MS);
+  Promise.resolve(p).then((v) => { clearTimeout(tm); resolve(v); }, (e) => { clearTimeout(tm); reject(e); });
+});
+
+async function reflowTestViaDebugger(tabId) {
+  if (!EXT.debugger || !EXT.permissions) {
+    throw new Error("The reflow test needs the debugger API — Chromium only (Chrome, Edge, Brave).");
+  }
+  let has = false;
+  try { has = await EXT.permissions.contains({ permissions: ["debugger"] }); } catch (_) {}
+  if (!has) {
+    let granted = false;
+    try { granted = await EXT.permissions.request({ permissions: ["debugger"] }); } catch (_) {}
+    if (!granted) throw new Error("permission-needed");
+  }
+  const target = { tabId };
+  await reflowDeadline(EXT.debugger.attach(target, "1.3"), "attach");
+  const send = (method, params) => reflowDeadline(EXT.debugger.sendCommand(target, method, params || {}), method);
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const evalJs = async (expression) => {
+    const res = await send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true, timeout: REFLOW_STEP_MS - 1000 });
+    if (res && res.exceptionDetails) throw new Error((res.exceptionDetails.exception && res.exceptionDetails.exception.description) || res.exceptionDetails.text || "reflow check failed in the page");
+    return res && res.result ? res.result.value : undefined;
+  };
+  const shot = async (width, height) => {
+    try {
+      const r = await send("Page.captureScreenshot", { format: "jpeg", quality: 60, clip: { x: 0, y: 0, width, height, scale: 1 }, captureBeyondViewport: false });
+      return r && r.data ? "data:image/jpeg;base64," + r.data : "";
+    } catch (_) { return ""; }
+  };
+  const check = (o) => evalJs(REFLOW_CHECK_FN + "(" + JSON.stringify(o) + ")");
+  const setFont = (v) => evalJs(`(function () { document.documentElement.style.fontSize = ${JSON.stringify(v)}; return document.documentElement.style.fontSize; })()`);
+  let overridden = false, fontBefore = null;
+  try {
+    await send("Page.enable");
+    const base = await evalJs(`({ w: innerWidth, h: innerHeight, sw: document.documentElement.scrollWidth, font: document.documentElement.style.fontSize || "" })`);
+    const shotBase = await shot(Math.min(base.w || 1280, 1600), Math.min(base.h || 800, 1000));
+    // what is already broken at the normal width (overlaps, cut-offs) is labelled "also at the normal viewport" and demoted
+    const before = await check({ limit: Math.max(base.w || 1280, 322) + 2, suffix: "-base", horizontal: false });
+    const baseKeys = before.keys || [];
+    await send("Emulation.setDeviceMetricsOverride", { width: 320, height: 800, deviceScaleFactor: 1, mobile: false });
+    overridden = true;
+    await sleep(300);
+    const narrow = await check({ limit: 322, suffix: "", baseKeys });
+    const shot320 = await shot(320, 800);
+    // 1.4.4: 200 % text at the page's own width — the 320 px override goes first
+    await send("Emulation.clearDeviceMetricsOverride");
+    overridden = false;
+    await sleep(200);
+    fontBefore = base.font;
+    await setFont("200%");
+    await sleep(300);
+    const zoom = await check({ limit: Math.max(base.w || 1280, 322) + 2, suffix: "-200", horizontal: false, baseKeys });
+    await setFont(fontBefore);
+    fontBefore = null;
+    const findings = [...narrow.findings, ...zoom.findings];
+    const counts = {};
+    for (const f of findings) counts[f.code] = (counts[f.code] || 0) + 1;
+    return {
+      findings,
+      summary: { baseWidth: base.w, baseHeight: base.h, baseScrollWidth: base.sw, scrollWidth: narrow.scrollWidth, scrollWidth200: zoom.scrollWidth, checked: narrow.checked, controls: narrow.controls, issues: findings.length, counts, preexisting: findings.filter((f) => f.base).length },
+      shots: { base: shotBase, narrow: shot320 },
+    };
+  } finally {
+    if (fontBefore !== null) { try { await setFont(fontBefore); } catch (_) {} }
+    if (overridden) { try { await send("Emulation.clearDeviceMetricsOverride"); } catch (_) {} }
+    try { await send("Page.disable"); } catch (_) {}
+    try { await reflowDeadline(EXT.debugger.detach(target), "detach"); } catch (_) {}
+  }
+}
+
 /* ---------- message router ---------- */
 
 // "Recommended" preset: WCAG 2.2 AA + best practices + SR rules (heading order, landmarks,
@@ -3194,6 +3487,12 @@ EXT.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         return { result: await axTreeViaDebugger(tabId) };
       case "axTreeAvailable":
         return { result: !!(EXT.debugger && EXT.permissions) };
+      case "debuggerGranted": {
+        if (!EXT.debugger || !EXT.permissions) return { result: false };
+        try { return { result: !!(await EXT.permissions.contains({ permissions: ["debugger"] })) }; } catch (_) { return { result: false }; }
+      }
+      case "reflowTest":
+        return { result: await reflowTestViaDebugger(tabId) };
       case "storeGet":
         return { result: (await EXT.storage.local.get(msg.key))[msg.key] ?? null };
       case "storeSet":
