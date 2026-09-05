@@ -39,3 +39,40 @@ gecko id `a11y-lens@engagendy.dev`, event-page background).
   identically, including spoken playback (speechSynthesis).
 - Local testing: about:debugging → This Firefox → Load Temporary Add-on →
   pick dist/firefox/manifest.json.
+
+## Release notes — 1.15.0 (paste into "Release notes" on upload)
+
+```
+New: Screen reader tab
+• Reading order with every accessible name, role and state, and the issues a
+  screen reader user hits: unnamed controls, generic "read more" links,
+  placeholder-only names, duplicate names, clickable divs without a role
+• Live-region monitor: every page change classified as ANNOUNCED, VIA FOCUS,
+  MAY BE MISSED or SILENT (toasts, validation errors, filters, counters)
+• Focus trace and keyboard auto-walk: focus lost after a delete, focus
+  escaping a dialog, unreachable controls, order jumps
+• Single-page-app navigation checks: unchanged title, duplicate H1, focus
+  not moved, nothing announced
+• Missing state on custom controls (aria-selected / expanded / pressed /
+  current, required markers) and link behaviour (new tab, download, external,
+  href="#")
+• Arabic/English voice-switching check and a bilingual page comparison
+• Journey transcript for recorded flows, a 0–100 score with Top 5 to fix
+• Every finding comes with a corrected snippet (HTML, React or Vue), an inline
+  diff, Apply-on-page with re-verify, and a spoken preview
+
+New: redesigned panel
+• One Run button, an Overview tab with per-audit cards and top issues,
+  filters on every tab, scan presets (Recommended / Strict WCAG / Everything)
+• Best-practice rules such as heading order and landmarks are now on by
+  default
+• Dark mode and full right-to-left layout
+• Exports available as soon as any tab has results; screen reader findings
+  included in Issues, Jira and Azure exports with a "how to verify" step
+
+Firefox notes
+• The browser accessibility tree and reflow test are Chromium-only and are
+  marked as unavailable in Firefox. The contrast eyedropper is still
+  unavailable in Firefox (no EyeDropper API). Everything else, including
+  spoken playback, works identically.
+```
