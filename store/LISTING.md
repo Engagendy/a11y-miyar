@@ -51,7 +51,27 @@ AND MORE
 • Color-contrast eyedropper with WCAG AA/AAA verdicts — sample any pixel on screen
 • Export reports as JSON, CSV, or a shareable standalone HTML file
 • Options: default rule set, flow scan interval, English or Arabic (RTL) interface
-• Keyboard shortcuts: S scan, R record flow, X clear, C contrast, 1/2/3 tabs
+• Keyboard shortcuts: S scan, R record flow, X clear, C contrast, 1–6 tabs, / filter
+
+NEW IN v1.15
+• 🔊 Screen reader tab — what a screen reader actually receives: the announced
+  reading order with every name, role and state; a live-region monitor that
+  classifies each page change as ANNOUNCED, VIA FOCUS, MAY BE MISSED or SILENT;
+  a focus trace (focus lost after a delete, focus escaping a modal, hidden or
+  unnamed targets) with a keyboard auto-walk; SPA route-change checks (stale
+  title, duplicate H1, focus stuck); missing state on custom controls; link
+  behaviour (new tab, download, external, href="#"); Arabic/English voice
+  switching; a bilingual AR/EN page comparison; the real browser accessibility
+  tree (Chromium, opt-in); a journey transcript for recorded flows
+• Every screen reader finding ships a fix: current HTML → corrected snippet
+  (HTML/React/Vue) with an inline diff, Apply-on-page with re-verify, Copy,
+  Inspect, and a spoken preview of what the screen reader would say
+• Screen reader score and Top 5 to fix; findings flow into Issues/Jira/Azure
+  tickets with a "How to verify" step
+• Redesigned panel: one Run button, an Overview tab with per-audit cards and
+  Top issues, contextual toolbars with filters on every tab, scan presets
+  (Recommended / Strict WCAG / Everything — best-practice rules on by default),
+  dark mode and full RTL
 
 NEW SINCE v1.0
 • 🇦🇪 UAE Design System (DLS) audit — 13 checks against the official AEGov design
@@ -93,6 +113,13 @@ Deque Systems, Inc.
 - **Host permission `<all_urls>`:** The extension is a developer tool that must
   be able to audit whichever page the developer has open in DevTools. Scans run
   only when the user explicitly clicks Scan / Record in the panel.
+- **Optional permission `debugger`:** Requested only when the user clicks
+  "Grant" on the Options page and used for two opt-in checks in the Screen
+  reader tab: reading the browser's real accessibility tree (what NVDA/VoiceOver
+  receive) and the reflow test. The extension attaches to the inspected tab for
+  about a second, runs the read-only DevTools-protocol commands, and detaches.
+  Chrome shows its standard "is debugging this tab" bar during that time.
+  Nothing is recorded or transmitted.
 - **Remote code:** None. axe-core is bundled in the package (vendor/axe.min.js).
 - **Data usage declaration:** does NOT collect any user data (tick "no" on all
   categories).
@@ -107,7 +134,8 @@ the developer through fixing them.
 ## Assets checklist
 
 - [x] Screenshots (1280×800): store/screenshots/1-automated-scan.png,
-      2-dls-audit.png, 3-manual-wizard.png
+      2-dls-audit.png, 3-manual-wizard.png, 4-overview.png,
+      5-screen-reader.png, 6-route-change.png (v1.15 UI)
 - [x] Icon 128×128: icons/icon128.png (auto-pulled from the package)
 - [ ] Optional small promo tile 440×280 (can skip at first)
 - [ ] Privacy policy URL — host store/PRIVACY.md publicly (e.g. GitHub repo /

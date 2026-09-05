@@ -1,6 +1,7 @@
 # Firefox Add-ons (AMO) submission kit
 
-Package: `dist/a11y-miyar-firefox.zip` (built by `./build-firefox.sh`, v1.13.0,
+Package: `store/a11y-miyar-firefox-v1.15.0.zip` (built by `./build-firefox.sh` from the
+v1.15.0 commit; also at `dist/a11y-miyar-firefox.zip`,
 gecko id `a11y-lens@engagendy.dev`, event-page background).
 
 ## Steps
@@ -31,6 +32,10 @@ gecko id `a11y-lens@engagendy.dev`, event-page background).
 ## Firefox-specific notes (also add to the AMO description)
 
 - The color-contrast eyedropper is unavailable in Firefox (no EyeDropper API);
-  the panel shows a notice instead. Everything else works identically.
+  the panel shows a notice instead.
+- The browser accessibility tree and reflow test in the Screen reader tab use
+  chrome.debugger and are Chromium-only; the Firefox build strips the optional
+  `debugger` permission and the buttons explain this. Everything else works
+  identically, including spoken playback (speechSynthesis).
 - Local testing: about:debugging → This Firefox → Load Temporary Add-on →
   pick dist/firefox/manifest.json.

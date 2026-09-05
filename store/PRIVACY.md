@@ -38,3 +38,18 @@ A11y Miyar bundles the open-source axe-core engine (Mozilla Public License 2.0,
 ## Contact
 
 Questions about this policy: engagendy@gmail.com
+
+## Optional debugger permission (v1.15+)
+
+Two opt-in checks (browser accessibility tree, reflow test) use the DevTools
+protocol through Chrome's `debugger` permission. It is requested only when you
+click Grant on the Options page, attaches to the tab you are auditing for about
+a second, and detaches immediately. It reads accessibility and layout
+information only; nothing is stored beyond the panel's local results and
+nothing is sent anywhere.
+
+## Bilingual comparison and spoken playback
+
+The bilingual comparison opens the URL you type in a hidden tab in your own
+browser, audits it locally, and closes it. Spoken playback uses the browser's
+built-in speech synthesis on your device. Neither feature contacts any server.
