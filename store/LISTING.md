@@ -140,3 +140,28 @@ the developer through fixing them.
 - [ ] Optional small promo tile 440×280 (can skip at first)
 - [ ] Privacy policy URL — host store/PRIVACY.md publicly (e.g. GitHub repo /
       gist / GitHub Pages) and paste the URL
+
+## Reviewer notes — Chrome Web Store (privacy practices / review replies)
+
+```
+Single purpose: audit the page open in DevTools for accessibility (WCAG)
+issues and guide the developer to fix them.
+
+Permissions
+- scripting: inject the bundled axe-core engine and helper scripts into the
+  inspected tab when the user clicks Run/Scan. No remote code.
+- storage: user settings and per-URL results, stored locally.
+- Host <all_urls>: the developer chooses the page by opening DevTools on
+  it; scans run only on explicit clicks.
+- Optional debugger: requested only when the user clicks Grant in Options.
+  Used for two opt-in checks: reading the browser's accessibility tree
+  (Accessibility.getFullAXTree) and a 320 px reflow test
+  (Emulation.setDeviceMetricsOverride). Attaches for about a second,
+  read-only commands, detaches immediately. Chrome's "is debugging this
+  tab" bar is shown during that time.
+
+Remote code: none. axe-core 4.13.0 is bundled unmodified.
+Data usage: the extension collects no user data. The optional AI fix
+feature sends the selected finding's HTML to api.anthropic.com only when
+the user has entered their own API key and clicks the button.
+```

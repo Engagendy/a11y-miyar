@@ -76,3 +76,55 @@ Firefox notes
   unavailable in Firefox (no EyeDropper API). Everything else, including
   spoken playback, works identically.
 ```
+
+## Notes to Reviewer — 1.15.0 (paste into the AMO "Notes to Reviewer" field)
+
+```
+A11y Miyar 1.15.0 — notes for the reviewer
+
+Purpose: an accessibility auditing panel inside DevTools. It injects the
+bundled axe-core engine and small helper scripts into the page the developer
+is inspecting, and renders the results in a DevTools panel.
+
+Third-party code
+- vendor/axe.min.js is the unmodified official release of axe-core 4.13.0
+  (MPL-2.0), byte-identical to
+  https://cdn.jsdelivr.net/npm/axe-core@4.13.0/axe.min.js
+  (https://github.com/dequelabs/axe-core/releases/tag/v4.13.0).
+  Per AMO policy for known libraries referenced to their official source,
+  no separate source upload is needed. Validator warnings inside this file
+  ("Function constructor is eval", "unsafe innerHTML") are part of the
+  upstream build.
+- All first-party code is unminified and human-readable: background.js,
+  panel.js, fixes.js, options.js, devtools.js.
+
+Permissions
+- scripting: inject axe-core and the helper functions into the inspected
+  tab, only when the user clicks a Run/Scan button in the panel.
+- storage: settings and per-URL results, local and sync storage only.
+- <all_urls>: a developer tool must audit whichever page is open in
+  DevTools. Nothing runs until the user clicks.
+- No debugger permission in the Firefox build (the Chromium-only features
+  that use it are disabled with an explanation in the panel).
+
+Network and data
+- No remote code. No analytics. No requests are made by default.
+- The only outbound request is the optional "AI fix" button, which calls
+  api.anthropic.com with a key the user pastes into Options. The key is
+  stored in local storage only. The feature is inert until a key exists.
+- The bilingual comparison opens a URL the user types into a hidden tab in
+  the user's own browser, runs the same in-page checks, and closes it.
+- Spoken playback uses the browser's speechSynthesis; nothing leaves the
+  device.
+- data_collection_permissions: {"required": ["none"]} is declared.
+
+How to test
+1. Open any page (the repo's test-page.html contains intentional
+   violations) and open DevTools → the "A11y Miyar" tab.
+2. Click "Run full audit". Findings appear on the Automated tab.
+3. Open the Screen reader tab and click "Run all checks", then "Start
+   monitoring" and interact with the page to see the live log.
+4. Options page: language, rule set, framework for snippets.
+
+Source: https://github.com/Engagendy/a11y-miyar (commit c458781 = 1.15.0).
+```
