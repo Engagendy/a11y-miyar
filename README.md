@@ -127,6 +127,30 @@ engine behind axe DevTools.
     `aria-current="page"` without `href` for the current item; each has a
     "How to verify" line and an Apply-on-page quick fix (hidden span, retag,
     aria-current)
+  - *Form group labelling* — the reading order flags `group-no-label`
+    (serious: two or more checkbox/radio controls sharing a `name` or a
+    wrapper with no `<fieldset>`/`<legend>` and no named
+    `role="group"`/`"radiogroup"` — a `<fieldset>` named by `aria-label`/
+    `aria-labelledby` counts, an "Other: [text]" field inside the fieldset does
+    not un-name it, a shared `name` across two separately labelled fieldsets is
+    two groups, and two unrelated checkboxes side by side are not a set; the row
+    is the container and the visible heading such as "Emirate" is offered as
+    the group name — groups inside tables, menus and listboxes are skipped), `question-not-associated`
+    (moderate: text ending in "?" followed within two siblings by two or more
+    visible, adjacent generic Yes/No/OK/Cancel/نعم/لا buttons with no
+    `role="group"`/dialog `aria-labelledby`, `aria-describedby` or fieldset
+    legend tying them to the question) and `label-not-associated` (serious: a `<label>` without `for`,
+    or a span/div with a `label` class or ending in ":", next to a field that
+    has no accessible name or a different one — placeholder-only counts as
+    different; fields with their own `<label for>` are not re-flagged by a
+    group heading). Fixes reuse the visible text: `<fieldset>`/`<legend>` or
+    `role="group" aria-labelledby` on the existing wrapper, `role="group"`
+    around the question and its buttons (or `aria-label="Yes — question"`),
+    and `<label for>` / wrapping label / `aria-labelledby` (React `htmlFor`
+    and Vue variants); Apply-on-page puts `role="group"` + the heading on the
+    container, `role="group"` + the question on the buttons' parent (when it
+    holds nothing else) or an `aria-label` on the field, each with a "How to
+    verify" line
   - *Inline diff, persisted logs, tab badge* — every "Now → Change to" fix
     shows a token-level diff (added tokens green, removed tokens struck red;
     Copy still copies the plain snippet); the live-region log, focus log
@@ -170,6 +194,12 @@ engine behind axe DevTools.
     element's `lang`; "▶ Play page" reads the listed rows top to bottom while
     highlighting each element on the page, with a 0.8–2× rate slider
     (remembered); live-log entries speak their text with the politeness prefix
+  - *Playback scoping* — the filter box and "issues only" decide which rows
+    play (the Play button's tooltip says "Play n rows"); every reading-order and
+    browser-tree row has "Play from here" (this row to the end) and "Play this
+    section" (the row plus everything nested under it — a card, a nav, a form);
+    "Play from element" lets you click an element on the page and starts from
+    its row; while playing, Space pauses/resumes and Esc stops
   - *Bilingual AR/EN page comparison* — enter the URL of the other-language
     version (guessed from `/ar/` ↔ `/en/`, `?lang=`, or an `ar.`/`en.` host
     prefix) and "🌐↔ Compare" loads it in a hidden background tab, runs the
@@ -223,6 +253,29 @@ engine behind axe DevTools.
     focus lost to `<body>` after a delete, focus escaping an open modal, focus on
     unnamed, `aria-hidden`, invisible or off-screen targets, positive tabindex,
     and missing focus styles. Runs automatically during ⏺ Record flow
+  - *Focus-ring contrast and clipping* — for every `:focus-visible` stop the
+    trace works out the ring the sighted user sees (outline, else the most
+    visible ring-shaped box-shadow layer — offset elevation shadows are not a
+    ring — else a border-colour change versus the un-focused border) and
+    flags `focus-ring-low-contrast` (serious: ring colour under 3:1 against the
+    effective background, ratio in the message), `focus-ring-thin` (minor: under
+    2px) and `focus-ring-clipped` (moderate: an `overflow` hidden/auto/scroll
+    ancestor cuts the ring + `outline-offset` off — calendars, carousels, card
+    grids), each with a `:focus-visible` / wrapper-padding fix snippet; a ring
+    over a background image or gradient is shown as "contrast unknown" instead
+    of being measured against white
+  - *Non-text contrast (WCAG 1.4.11)* — axe has no rule for it, so the
+    "Non-text contrast (borders, icons, toggles)" step measures every visible
+    form control, icon-only button/link and custom toggle (`role="switch"`,
+    `.toggle`/`.switch`): every boundary the sighted user could rely on — each
+    visible border side, the control's own background where it differs from
+    the surroundings, and the strongest SVG fill/stroke or icon-font colour —
+    against the effective background behind it; the best of them decides, so a
+    faint decorative border on an icon button with a dark glyph passes; under
+    3:1 → `nontext-contrast` (serious)
+    with both swatches and the ratio, disabled controls and children of a
+    failed control skipped, and a `border-color` / `fill` / `background-color`
+    fix at a passing colour (nearest UAE DLS token when "DLS colors" is on)
   - *Keyboard auto-walk* — "⌨ Auto-walk" in the Focus trace toolbar moves
     focus through every Tab stop in real Tab order (positive `tabindex` first,
     then DOM order, shadow roots flattened, hidden/inert/`aria-hidden` stops
@@ -233,6 +286,28 @@ engine behind axe DevTools.
     positive `tabindex`) and *possible traps* (a container with an `onkeydown`
     handler or `role="dialog"` without `aria-modal` — verify by hand, script
     cannot send a real Tab key)
+  - *Custom widget keyboard probe* (part of the auto-walk, **hints only**) —
+    on every Tab stop that is or sits inside `role="tablist"`, `radiogroup`,
+    `listbox`, `menu`, `menubar`, `tree`, `grid` or `combobox`, an
+    `aria-haspopup` trigger or a `div`/`span` with `role="button"`, the walk
+    dispatches synthetic ArrowRight, ArrowDown, ArrowLeft, ArrowUp (until one
+    moves), Enter, Space and Escape (on the element that holds focus, then on
+    the popup) and
+    watches 150 ms for a focus move, an `aria-selected/expanded/checked/
+    activedescendant` change, a popup (listbox/menu/dialog/grid becoming
+    visible) or any DOM change; reports `widget-no-arrow-nav` (serious: arrows
+    changed nothing in a tablist/radiogroup/listbox/menu — roving `tabindex`
+    + `keydown` fix, React/Vue variants), `widget-no-enter-space` (moderate:
+    Enter and Space changed nothing on a `role="button"` div, combobox or
+    `aria-haspopup` trigger — *verify manually, synthetic keys cannot trigger
+    native activation*) and `widget-esc-no-close` (moderate: the popup opened
+    by Enter stayed open after Escape). Native `<select>`, date inputs,
+    `contenteditable`, submit buttons, Enter inside a `<form>`, native
+    `<button>`/`<a href>`/`<input>` triggers (the browser turns Enter/Space into
+    a click) and `div` buttons named Delete/Logout/Submit/Pay/Accept… (the probe
+    runs real handlers) are skipped,
+    each probe ends with Escape + blur + re-focus, at most 40 widgets are
+    probed and the score penalty is capped at 15 (serious 5 / moderate 2)
   - *Language & voice switching* — Arabic text under `lang="en"` and Latin text
     under `lang="ar"` (the screen reader picks the wrong voice), missing or
     invalid `lang`, page-majority vs `<html lang>`, Arabic rendered LTR
@@ -262,7 +337,9 @@ engine behind axe DevTools.
 - **Keyboard shortcuts** — in the panel: S or Ctrl/⌘+Enter runs the active tab's
   audit (Overview: full audit), R record/stop flow, H highlight all, X clear
   highlights, C contrast, E export menu, / focus the active tab's filter box, I toggle
-  "issues only" on the Screen reader tab, Esc close menus, 1–6 switch tabs
+  "issues only" on the Screen reader tab, Esc close menus, 1–6 switch tabs;
+  while "Hear it" playback runs on the Screen reader tab, Space pauses/resumes
+  and Esc stops
 - **Automated tab** — a contextual toolbar (filter, Highlight all, Auto-fix,
   Clear), clickable severity pills that show/hide a severity, findings grouped
   under severity headers, and per-element fix suggestions collapsed behind

@@ -1,7 +1,7 @@
 // Screenshots of the panel in typical states, for visual review (9 states):
 //   1-initial (Overview first-run hero), 2-after-scan (Automated), 3-sr-empty, 4-sr-order,
 //   5-manual, 6-dls (report), 8-overview (after everything ran), 9-export-menu (open Export menu),
-//   7-narrow (700px, Automated), 14-scan-settings (presets popover open over the Automated tab).
+//   7-narrow (700px, Automated), 14-scan-settings (presets popover open over the Automated tab), 16-sr-ntc (non-text contrast rows), 17-sr-group-label (form group labelling rows).
 //   cd ci && node panel-shots.mjs [en|ar] [light|dark] [outDir]
 // Headless smoke test for the 🔊 Screen reader tab: drives panel.html against
 // test-page.html with a stubbed background (no extension install needed).
@@ -32,7 +32,7 @@ const ops = {
   storeGet: async (m) => store[m.key] ?? null, storeSet: async (m) => { store[m.key] = m.value; return true; }, storeRemove: async (m) => { delete store[m.key]; return true; },
   injectAxe: async () => { await target.addScriptTag({ content: axe }); await target.addScriptTag({ content: stub + bg }); return true; },
   runAxe: async (m) => target.evaluate(([r, rules]) => runAxeInPage(r, rules), [m.runOnly, m.rules]),
-  srTree: () => inPage(() => srTreeInPage()), langCheck: () => inPage(() => langCheckInPage()),
+  srTree: () => inPage(() => srTreeInPage()), langCheck: () => inPage(() => langCheckInPage()), nonTextContrast: () => inPage(() => nonTextContrastInPage()),
   srCompare: async (m) => ({ url: m.url, order: await inPage(() => srTreeInPage()), lang: await inPage(() => langCheckInPage()) }),
   liveStart: () => inPage(() => liveInstallInPage()), liveDrain: () => inPage(() => liveDrainInPage()), liveStop: () => inPage(() => liveStopInPage()),
   focusStart: () => inPage(() => focusInstallInPage()), focusDrain: () => inPage(() => focusDrainInPage()), focusStop: () => inPage(() => focusStopInPage()),
@@ -98,6 +98,11 @@ await panel.evaluate(() => { const b = document.getElementById("srFilterInput");
   const row = [...document.querySelectorAll("#srOrderList .sr-row:not([hidden])")].find((r) => r.dataset.srSel === "#crumbCurrent"); const d = row && row.querySelector("details"); if (d) d.open = true; row && row.scrollIntoView(); });
 await panel.waitForTimeout(200);
 await shot("13-sr-link-order");
+// form group labelling: unlabelled checkbox group, question + Yes/No, label not linked — the group fix open
+await panel.evaluate(() => { const b = document.getElementById("srFilterInput"); b.value = "-label"; b.dispatchEvent(new Event("input"));
+  const row = [...document.querySelectorAll("#srOrderList .sr-row:not([hidden])")].find((r) => r.dataset.srSel === "#filterGroup"); const d = row && row.querySelector("details"); if (d) d.open = true; row && row.scrollIntoView(); });
+await panel.waitForTimeout(200);
+await shot("17-sr-group-label");
 await panel.evaluate(() => { const b = document.getElementById("srFilterInput"); b.value = ""; b.dispatchEvent(new Event("input")); window.scrollTo(0, 0); });
 // live monitor + SPA route-change rows: silent "Services" route, announced "Contact" route
 await panel.evaluate(() => { document.getElementById("srOrderSection").open = false; document.getElementById("srLiveSection").open = true; });
@@ -114,6 +119,28 @@ await panel.waitForTimeout(200);
 await shot("12-sr-state-live");
 await panel.evaluate(() => { const b = document.getElementById("srFilterInput"); b.value = ""; b.dispatchEvent(new Event("input")); });
 await panel.click("#srLiveBtn"); await panel.waitForTimeout(300);
+// focus trace: focus-ring contrast / thickness / clipping rows with the ring badge and the first fix open
+await panel.evaluate(() => { document.getElementById("srLiveSection").open = false; document.getElementById("srFocusSection").open = true; });
+await panel.click("#srFocusBtn"); await panel.waitForTimeout(300);
+await target.keyboard.press("Shift");
+for (const id of ["ringFaint", "ringClipped"]) { await target.evaluate((i) => document.getElementById(i).focus(), id); await target.waitForTimeout(150); }
+await panel.waitForTimeout(1200);
+await panel.evaluate(() => { const row = [...document.querySelectorAll("#srFocusLog .sr-row")].find((r) => r.dataset.srSel === "#ringFaint"); const d = row && row.querySelector("details"); if (d) d.open = true; document.getElementById("srFocusSection").scrollIntoView(); });
+await shot("15-sr-focus-ring");
+// custom widget keyboard probe: auto-walk, then the widget-* rows with the roving-tabindex fix open
+await panel.click("#srWalkBtn"); await panel.waitForTimeout(3000);
+for (let i = 0; i < 100 && await panel.evaluate(() => document.getElementById("srWalkBtn").disabled); i++) await panel.waitForTimeout(250);
+await panel.evaluate(() => { const b = document.getElementById("srFilterInput"); b.value = "widget-"; b.dispatchEvent(new Event("input"));
+  const row = [...document.querySelectorAll("#srFocusLog .sr-row:not([hidden])")].find((r) => r.dataset.srSel === "#kbdBadTab1"); const d = row && row.querySelector("details"); if (d) d.open = true; document.getElementById("srWalkSummary").scrollIntoView(); });
+await panel.waitForTimeout(200);
+await shot("18-sr-widget-probe");
+await panel.evaluate(() => { const b = document.getElementById("srFilterInput"); b.value = ""; b.dispatchEvent(new Event("input")); });
+await panel.click("#srFocusBtn"); await panel.waitForTimeout(300);
+// non-text contrast: the three failing fixtures with swatches, the first fix open
+await panel.evaluate(() => { document.getElementById("srFocusSection").open = false; document.getElementById("srNtcSection").open = true; });
+await panel.click("#srNtcBtn"); await panel.waitForTimeout(800);
+await panel.evaluate(() => { const d = document.querySelector("#srNtcList .sr-row details"); if (d) d.open = true; document.getElementById("srNtcSection").scrollIntoView(); });
+await shot("16-sr-ntc");
 await panel.click("#tabs button[data-view='manual']"); await panel.waitForTimeout(300);
 await shot("5-manual");
 await panel.click("#tabs button[data-view='dls']"); await panel.click("#dlsBtn"); await panel.waitForTimeout(1500);

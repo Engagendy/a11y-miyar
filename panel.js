@@ -65,7 +65,7 @@ const STR = {
     ovManualHint: "Guided walkthroughs for what machines cannot judge — Pass / Fail / N/A per test.",
     ovClean: "clean", ovFails: (n) => `${n} fail`, ovWarns: (n) => `${n} warn`, ovScoreOf: "/100",
     verdictPass: "PASS", verdictWarn: "WARN", verdictFail: "FAIL",
-    hotkeys: "In the panel: S or Ctrl/⌘+Enter = run the active tab's audit (Overview: full audit), R = record/stop flow, H = highlight all, X = clear highlights, C = contrast, E = export menu, / = focus the active tab's filter box, I = toggle \"issues only\" on the Screen reader tab, Esc = close menus, 1–6 = switch tabs (Overview, Automated, DLS, Manual, Screen reader, Help).",
+    hotkeys: "In the panel: S or Ctrl/⌘+Enter = run the active tab's audit (Overview: full audit), R = record/stop flow, H = highlight all, X = clear highlights, C = contrast, E = export menu, / = focus the active tab's filter box, I = toggle \"issues only\" on the Screen reader tab, Esc = close menus, 1–6 = switch tabs (Overview, Automated, DLS, Manual, Screen reader, Help). While 'Hear it' playback is running on the Screen reader tab: Space = pause/resume (the current row stays highlighted), Esc = stop.",
     modeA11y: "Accessibility", modeBoth: "Accessibility + DLS", modeDls: "DLS only",
     reset: "Reset", resetDone: "Cleared — ready for a fresh audit.",
     dlsInOtherTab: (p, t) => ` · DLS: ${p}/${t} — see the 🇦🇪 tab`,
@@ -125,8 +125,15 @@ const STR = {
     srBuild: "Build reading order", srIssuesOnly: "issues only", srAddFindings: "Add issues to Manual test",
     srPlay: "Play page", srStop: "Stop", srPlayTitle: "Read the rows below aloud, top to bottom, highlighting each element on the page",
     srSpeak: "Hear it — what a screen reader would say", srRate: "rate",
+    srPlayFrom: "Play from here", srPlaySubtree: "Play this section", srPlayPick: "Play from element",
+    srPlayPickTitle: "Click an element on the inspected page, then playback starts from its row (respecting the filter)",
+    srPlayScope: (n) => `Play ${n} row(s) — Space pauses/resumes, Esc stops`,
+    srPickNoRow: "No reading-order row matches the picked element — build the reading order or clear the filter.",
+    srPicking: "Click an element on the page…", srPickCancelled: "Nothing picked.", srPickFailed: "Pick failed: ",
+    srPaused: "Paused — press Space to resume, Esc to stop.",
+    srPlayingFrom: "from here", srPlayingSubtree: "this section", srPlayingPick: "from the picked element",
     srNoVoice: (l) => `No ${l === "ar" ? "Arabic" : l === "en" ? "English" : l} voice installed in this browser — speaking with the default voice`,
-    srPlaying: (i, n) => `Speaking row ${i} of ${n}…`, srPlayDone: (n) => `Played ${n} row(s).`, srNothingToPlay: "Nothing to play — build the reading order first.",
+    srPlaying: (i, n, scope) => `Speaking row ${i} of ${n}${scope ? " (" + scope + ")" : ""}…`, srPlayDone: (n) => `Played ${n} row(s).`, srNothingToPlay: "Nothing to play — build the reading order first.",
     srBuilding: "Computing accessible names with axe-core…",
     srNoIssues: "No naming/role issues in the reading order. Untick 'issues only' to read the whole page as a screen reader would.",
     srNoRows: "Nothing announced — the page body is empty or entirely hidden from assistive technology.",
@@ -136,18 +143,25 @@ const STR = {
     srRegionsFound: (n) => `${n} live region(s) present on load:`,
     srRegionsNone: "No live regions on the page at monitor start — any toast, validation error or status text will be SILENT unless focus moves to it.",
     srFocusStart: "Start focus trace", srFocusStop: "Stop focus trace",
+    srRingFmt: (kind, w, c) => `ring: ${kind} ${w}px` + (c == null ? " · contrast unknown (image behind)" : ` · ${Number(c).toFixed(1)}:1`), srRingTitle: (color, bg) => `Focus ring colour ${color} on background ${bg}`,
     srFocusWaiting: "Tracing… press Tab through the page, open and close a modal, delete an item, submit a form.",
     srFocusIdle: "Start the trace, then use the keyboard. Each focus move is logged with the role and name that would be announced; focus lost to <body>, focus escaping a modal, focus on unnamed or hidden elements are flagged.",
-    srWalk: "Auto-walk", srWalkRunning: "Walking…", srWalkTitle: "Move focus through every Tab stop automatically and report unreachable stops, order jumps and trap candidates",
-    srWalkSummary: (r) => `Auto-walk: ${r.reached} of ${r.candidates} Tab stop(s) reached${r.truncated ? " (capped at " + r.steps + ")" : ""} · ${r.unreachable.length} unreachable · ${r.jumps.length} order jump(s) · ${r.traps.length} possible trap(s)${r.traps.length ? " — verify traps manually with a real Tab key" : ""}`,
+    srWalk: "Auto-walk", srWalkRunning: "Walking…", srWalkTitle: "Move focus through every Tab stop automatically and report unreachable stops, order jumps, trap candidates and custom widgets that ignore arrow keys / Enter / Space / Escape (synthetic keys — hints to verify by hand)",
+    srWalkSummary: (r) => `Auto-walk: ${r.reached} of ${r.candidates} Tab stop(s) reached${r.truncated ? " (capped at " + r.steps + ")" : ""} · ${r.unreachable.length} unreachable · ${r.jumps.length} order jump(s) · ${r.traps.length} possible trap(s)${r.traps.length ? " — verify traps manually with a real Tab key" : ""}${r.probed ? ` · ${r.probed} custom widget(s) probed${r.probeCapped ? " (capped at 40)" : ""}, ${(r.widgets || []).filter((w) => !w.ok).length} keyboard hint(s) — synthetic keys, verify by hand` : ""}`,
     srWalkNone: "Auto-walk: no Tab stops found on the page.", srWalkFailed: "Auto-walk failed: ",
     srLang: "Check languages", srLangRunning: "Scanning text runs for script/lang mismatches…",
     srLangOk: "Declared languages match the text. Screen readers will switch voices correctly.",
+    srSecNtc: "Non-text contrast (borders, icons, toggles)", srNtc: "Check non-text contrast", srNtcRunning: "Measuring control borders, toggles and icons against their background…",
+    srNtcOk: "Every measurable control boundary, toggle and icon reaches 3:1 against its background.",
+    srNtcNote: "WCAG 1.4.11 — axe has no rule for it. For every visible form control, icon-only button/link and custom toggle one boundary a sighted user can rely on (any visible border side, the control's own background, or the icon glyph — the best of them decides) must reach 3:1 against the background behind it. Disabled controls, native widgets the browser paints itself and controls over a photo or gradient (background unknown) are skipped.",
+    srNtcStats: (r) => `${r.checked} control(s) measured · ` + (r.issues.length ? `⚠ ${r.issues.length} under 3:1` : "✓ all reach 3:1"),
+    srNtcDone: (n) => n ? `Non-text contrast — ${n} control(s) under 3:1` : "Non-text contrast — all controls reach 3:1", srNtcFailed: "Non-text contrast check failed: ",
+    srNtcKind: { border: "border", background: "background", icon: "icon" }, srNtcOn: "on",
     srAx: "Fetch browser tree", srAxRunning: "Reading the accessibility tree through the DevTools protocol…",
     srAxNote: "Reads the tree the browser hands to NVDA/VoiceOver through the DevTools protocol — the ground truth when the reading order above and the real screen reader disagree. Needs the debugger permission (Options → Screen reader checks); Chrome shows a \"debugging\" bar for about a second.",
     srScoreTitle: "Screen reader score", srScoreOf: "of 100", srScoreTop: "Top 5 to fix", srScoreClean: "Nothing to fix — every section that has run is clean.",
     srScorePass: "✓ PASS", srScoreWarn: "△ WARN", srScoreFail: "✗ FAIL", srScoreIssues: (n) => `${n} issue(s)`, srScoreNotRun: "not run",
-    srScoreSecOrder: "reading order", srScoreSecLive: "live regions", srScoreSecFocus: "focus trace", srScoreSecLang: "language", srScoreSecAx: "browser tree", srScoreSecCmp: "bilingual",
+    srScoreSecOrder: "reading order", srScoreSecLive: "live regions", srScoreSecFocus: "focus trace", srScoreSecLang: "language", srScoreSecNtc: "non-text contrast", srScoreSecAx: "browser tree", srScoreSecCmp: "bilingual",
     srSecCmp: "Bilingual comparison (AR/EN)", srCmp: "Compare", srCmpRunning: "Loading the other-language page in a hidden tab and comparing…",
     srCmpUrlPh: "https://…/ar/ — URL of the other-language version",
     srCmpNote: "Loads the other-language page in a hidden tab and diffs the two accessibility trees: controls, names, landmark labels, live regions and heading levels present on one side only, plus html lang/dir on each side.",
@@ -190,6 +204,17 @@ const STR = {
     srMsgLinkAsBtnCurrent: (what, crumb) => `${what} on the current ${crumb ? "breadcrumb" : "pagination"} item — announced as "same page link" though it goes nowhere; the screen reader never hears "current page"`,
     srMsgLinkAsBtnNav: (what, crumb) => `${what} inside a ${crumb ? "breadcrumb" : "pagination"} — announced as "same page link" and Enter jumps to the top of the page instead of navigating`,
     srMsgLinkAsBtnHandler: (what) => `${what} with a click handler — announced as "same page link", not a button, and Enter scrolls to the top before the script runs`,
+    srMsgGroupNoLabel: (n, kind, hint) => `${n} ${kind} controls form a group with no group name — no <fieldset>/<legend> and no role="group" with a label${hint ? ` (the visible "${hint}" is not linked)` : ""}; the screen reader announces each ${kind} by its own text only, never what the choice is about`,
+    srMsgNontextContrast: (ratio, kind, color, bg) => `Non-text contrast ${ratio}:1 — ${kind === "border" ? "border" : kind === "background" ? "control background" : "icon"} ${color} on ${bg}; a control's boundary, state indicator or icon needs 3:1 (WCAG 1.4.11)`,
+    srMsgFocusRingLowContrast: (kind, color, ratio, bg) => `focus ring (${kind} ${color}) has ${ratio}:1 contrast against its background ${bg} — needs 3:1 (WCAG 2.4.11 / 1.4.11)`,
+    srMsgFocusRingThin: (w, kind) => `focus ring is only ${w}px thick (${kind}) — use at least 2px so it is noticed`,
+    srMsgFocusRingClipped: (overflow, sel, kind, extent) => `focus ring is cut off by an ancestor with overflow:${overflow} (${sel}) — the ${kind} extends ${extent}px outside the element`,
+    srMsgWidgetNoArrow: (keys, widget, container) => `custom widget: ${keys} changed nothing inside role="${widget}" (${container}) — no focus move, aria state or DOM change within 150 ms; a keyboard user is stuck on the first item (hint from synthetic keys — verify with a real keyboard)`,
+    srMsgWidgetNoEnterSpace: (keys, haspopup, widget) => `custom widget: ${keys} changed nothing on this ${haspopup ? "aria-haspopup=\"" + haspopup + "\" " : ""}${widget} — verify manually — synthetic keys cannot trigger native activation, but a div/span with a click-only handler never opens for keyboard users`,
+    srMsgWidgetEscNoClose: (changed) => `custom widget: the popup opened by Enter did not close on Escape (${changed || "no change"} within 150 ms) — users end up pressing Escape twice or Tab-ing out (hint from synthetic keys — verify by hand)`,
+    srMsgQuestionNotAssoc: (names, q) => `${names} buttons are not associated with the question "${q}" — in the buttons list (or when tabbing straight to them) the screen reader announces just ${names}, without what is being asked; wrap them in role="group" aria-labelledby pointing at the question`,
+    srMsgLabelNotAssoc: (lbl, name) => `visible label "${lbl}" is not linked to the field — announced as ${name ? `"${name}"` : "an unnamed field"} instead; use <label for> so the text next to the field is what the screen reader (and voice control) gets`,
+    srApplyGroupLabel: "Group label", srApplyFieldLabel: "Field label",
     presetComboBp: "BP", presetComboSr: "SR", srStateLbl: "STATE",
     srMoreRows: (n) => `…and ${n} more row(s).`, srOrderBuilt: (n) => n ? `Reading order built — ${n} screen reader issue(s)` : "Reading order built — no naming issues found",
     srFindingsAdded: (n, title) => `${n} finding(s) added to "${title}" — see the Manual tests tab.`,
@@ -269,7 +294,7 @@ const STR = {
     ovManualHint: "جولات موجّهة لما لا تستطيع الآلة الحكم عليه — ناجح / فاشل / لا ينطبق لكل اختبار.",
     ovClean: "نظيف", ovFails: (n) => `${n} فاشل`, ovWarns: (n) => `${n} تحذير`, ovScoreOf: "/100",
     verdictPass: "ناجح", verdictWarn: "تحذير", verdictFail: "راسب",
-    hotkeys: "في اللوحة: S أو Ctrl/⌘+Enter لتشغيل تدقيق التبويب النشط (نظرة عامة: التدقيق الكامل)، R تسجيل/إيقاف المسار، H تظليل الكل، X مسح التظليل، C التباين، E قائمة التصدير، / التركيز على مربع التصفية في التبويب النشط، I تبديل «المشاكل فقط» في تبويب قارئ الشاشة، Esc إغلاق القوائم، 1–6 تبديل التبويبات (نظرة عامة، الفحص الآلي، نظام التصميم، اليدوية، قارئ الشاشة، مساعدة).",
+    hotkeys: "في اللوحة: S أو Ctrl/⌘+Enter لتشغيل تدقيق التبويب النشط (نظرة عامة: التدقيق الكامل)، R تسجيل/إيقاف المسار، H تظليل الكل، X مسح التظليل، C التباين، E قائمة التصدير، / التركيز على مربع التصفية في التبويب النشط، I تبديل «المشاكل فقط» في تبويب قارئ الشاشة، Esc إغلاق القوائم، 1–6 تبديل التبويبات (نظرة عامة، الفحص الآلي، نظام التصميم، اليدوية، قارئ الشاشة، مساعدة). أثناء تشغيل «اسمعه» في تبويب قارئ الشاشة: مسافة للإيقاف المؤقت/الاستئناف (يبقى الصف الحالي مُبرزاً)، وEsc للإيقاف.",
     modeA11y: "إمكانية الوصول", modeBoth: "إمكانية الوصول + نظام التصميم", modeDls: "نظام التصميم فقط",
     reset: "إعادة تعيين", resetDone: "تم المسح — جاهز لتدقيق جديد.",
     dlsInOtherTab: (p, t) => ` · نظام التصميم: ${p}/${t} — انظر تبويب 🇦🇪`,
@@ -329,8 +354,15 @@ const STR = {
     srBuild: "بناء ترتيب القراءة", srIssuesOnly: "المشاكل فقط", srAddFindings: "إضافة المشاكل إلى الاختبار اليدوي",
     srPlay: "تشغيل الصفحة", srStop: "إيقاف", srPlayTitle: "قراءة الصفوف أدناه بصوت عالٍ من الأعلى إلى الأسفل مع إبراز كل عنصر في الصفحة",
     srSpeak: "اسمعه — ما سيقوله قارئ الشاشة", srRate: "السرعة",
+    srPlayFrom: "التشغيل من هنا", srPlaySubtree: "تشغيل هذا القسم", srPlayPick: "التشغيل من عنصر",
+    srPlayPickTitle: "انقر عنصراً في الصفحة المفحوصة فيبدأ التشغيل من صفّه (مع مراعاة التصفية)",
+    srPlayScope: (n) => `تشغيل ${n} صف/صفوف — مسافة للإيقاف المؤقت/الاستئناف، Esc للإيقاف`,
+    srPickNoRow: "لا يوجد صف في ترتيب القراءة يطابق العنصر المختار — ابنِ ترتيب القراءة أو امسح التصفية.",
+    srPicking: "انقر عنصراً في الصفحة…", srPickCancelled: "لم يُختر شيء.", srPickFailed: "فشل الاختيار: ",
+    srPaused: "متوقف مؤقتاً — اضغط مسافة للاستئناف أو Esc للإيقاف.",
+    srPlayingFrom: "من هنا", srPlayingSubtree: "هذا القسم", srPlayingPick: "من العنصر المختار",
     srNoVoice: (l) => `لا يوجد صوت ${l === "ar" ? "عربي" : l === "en" ? "إنجليزي" : l} مثبّت في هذا المتصفح — يُستخدم الصوت الافتراضي`,
-    srPlaying: (i, n) => `جارٍ نطق الصف ${i} من ${n}…`, srPlayDone: (n) => `تم تشغيل ${n} صف/صفوف.`, srNothingToPlay: "لا شيء للتشغيل — ابنِ ترتيب القراءة أولاً.",
+    srPlaying: (i, n, scope) => `جارٍ نطق الصف ${i} من ${n}${scope ? " (" + scope + ")" : ""}…`, srPlayDone: (n) => `تم تشغيل ${n} صف/صفوف.`, srNothingToPlay: "لا شيء للتشغيل — ابنِ ترتيب القراءة أولاً.",
     srBuilding: "جارٍ حساب الأسماء المتاحة عبر axe-core…",
     srNoIssues: "لا مشاكل في الأسماء أو الأدوار ضمن ترتيب القراءة. ألغِ تحديد \"المشاكل فقط\" لقراءة الصفحة كاملة كما يسمعها قارئ الشاشة.",
     srNoRows: "لا شيء يُعلَن — جسم الصفحة فارغ أو مخفي بالكامل عن التقنيات المساعدة.",
@@ -340,18 +372,25 @@ const STR = {
     srRegionsFound: (n) => `${n} منطقة حية موجودة عند التحميل:`,
     srRegionsNone: "لا مناطق حية في الصفحة عند بدء المراقبة — أي إشعار أو خطأ تحقق أو نص حالة سيكون صامتاً ما لم ينتقل التركيز إليه.",
     srFocusStart: "بدء تتبّع التركيز", srFocusStop: "إيقاف التتبّع",
+    srRingFmt: (kind, w, c) => `حلقة التركيز: ${kind} ${w}px` + (c == null ? " · التباين مجهول (صورة خلفية)" : ` · ${Number(c).toFixed(1)}:1`), srRingTitle: (color, bg) => `لون حلقة التركيز ${color} على خلفية ${bg}`,
     srFocusWaiting: "جارٍ التتبّع… اضغط Tab عبر الصفحة، افتح وأغلق نافذة حوارية، احذف عنصراً، أرسل نموذجاً.",
     srFocusIdle: "ابدأ التتبّع ثم استخدم لوحة المفاتيح. يُسجَّل كل انتقال للتركيز مع الدور والاسم الذي سيُعلَن؛ ويُعلَّم فقدان التركيز إلى <body>، وهروبه من النافذة الحوارية، ووقوعه على عناصر بلا اسم أو مخفية.",
-    srWalk: "جولة تلقائية", srWalkRunning: "جارٍ التنقّل…", srWalkTitle: "ينقل التركيز تلقائياً عبر كل محطات Tab ويبلّغ عن المحطات غير القابلة للوصول وقفزات الترتيب والمصائد المحتملة",
-    srWalkSummary: (r) => `الجولة التلقائية: وصل التركيز إلى ${r.reached} من ${r.candidates} محطة Tab${r.truncated ? " (بحد أقصى " + r.steps + ")" : ""} · ${r.unreachable.length} غير قابلة للوصول · ${r.jumps.length} قفزة ترتيب · ${r.traps.length} مصيدة محتملة${r.traps.length ? " — تحقّق من المصائد يدوياً بمفتاح Tab حقيقي" : ""}`,
+    srWalk: "جولة تلقائية", srWalkRunning: "جارٍ التنقّل…", srWalkTitle: "ينقل التركيز تلقائياً عبر كل محطات Tab ويبلّغ عن المحطات غير القابلة للوصول وقفزات الترتيب والمصائد المحتملة والعناصر المخصّصة التي تتجاهل الأسهم / Enter / Space / Escape (مفاتيح اصطناعية — تلميحات تُتحقّق يدوياً)",
+    srWalkSummary: (r) => `الجولة التلقائية: وصل التركيز إلى ${r.reached} من ${r.candidates} محطة Tab${r.truncated ? " (بحد أقصى " + r.steps + ")" : ""} · ${r.unreachable.length} غير قابلة للوصول · ${r.jumps.length} قفزة ترتيب · ${r.traps.length} مصيدة محتملة${r.traps.length ? " — تحقّق من المصائد يدوياً بمفتاح Tab حقيقي" : ""}${r.probed ? ` · ${r.probed} عنصر مخصّص مفحوص${r.probeCapped ? " (بحد أقصى 40)" : ""}، ${(r.widgets || []).filter((w) => !w.ok).length} تلميح لوحة مفاتيح — مفاتيح اصطناعية، تحقّق يدوياً` : ""}`,
     srWalkNone: "الجولة التلقائية: لا محطات Tab في الصفحة.", srWalkFailed: "فشلت الجولة التلقائية: ",
     srLang: "فحص اللغات", srLangRunning: "جارٍ فحص النصوص بحثاً عن تعارض بين الخط واللغة المعلنة…",
     srLangOk: "اللغات المعلنة تطابق النصوص. سيبدّل قارئ الشاشة الأصوات بشكل صحيح.",
+    srSecNtc: "تباين العناصر غير النصية (الحدود والأيقونات والمفاتيح)", srNtc: "فحص التباين غير النصي", srNtcRunning: "جارٍ قياس حدود عناصر التحكم والمفاتيح والأيقونات مقابل خلفيتها…",
+    srNtcOk: "كل حدود عناصر التحكم والمفاتيح والأيقونات القابلة للقياس تبلغ 3:1 مقابل خلفيتها.",
+    srNtcNote: "معيار WCAG 1.4.11 — لا توجد قاعدة له في axe. لكل حقل نموذج مرئي وزر/رابط أيقوني ومفتاح تبديل مخصص، يجب أن يبلغ حدّ واحد يعتمد عليه المبصر (أي جانب إطار ظاهر، أو خلفية العنصر نفسه، أو رمز الأيقونة — الأفضل بينها هو الحكم) نسبة 3:1 مقابل الخلفية خلفه. تُتجاهل العناصر المعطّلة والعناصر الأصلية التي يرسمها المتصفح بنفسه والعناصر فوق صورة أو تدرّج (خلفية مجهولة).",
+    srNtcStats: (r) => `قيس ${r.checked} عنصر تحكم · ` + (r.issues.length ? `⚠ ${r.issues.length} دون 3:1` : "✓ الكل يبلغ 3:1"),
+    srNtcDone: (n) => n ? `التباين غير النصي — ${n} عنصر تحكم دون 3:1` : "التباين غير النصي — كل العناصر تبلغ 3:1", srNtcFailed: "فشل فحص التباين غير النصي: ",
+    srNtcKind: { border: "إطار", background: "خلفية", icon: "أيقونة" }, srNtcOn: "على",
     srAx: "جلب شجرة المتصفح", srAxRunning: "جارٍ قراءة شجرة إمكانية الوصول عبر بروتوكول DevTools…",
     srAxNote: "يقرأ الشجرة التي يسلّمها المتصفح فعلاً إلى NVDA/VoiceOver عبر بروتوكول DevTools — المرجع الحاسم عندما يختلف ترتيب القراءة أعلاه عن قارئ الشاشة الحقيقي. يتطلب إذن debugger (الإعدادات ← فحوص قارئ الشاشة)؛ يعرض Chrome شريط \"debugging\" لنحو ثانية.",
     srScoreTitle: "درجة قارئ الشاشة", srScoreOf: "من 100", srScoreTop: "أهم 5 إصلاحات", srScoreClean: "لا شيء لإصلاحه — كل قسم تم تشغيله سليم.",
     srScorePass: "✓ ناجح", srScoreWarn: "△ تحذير", srScoreFail: "✗ راسب", srScoreIssues: (n) => `${n} مشكلة`, srScoreNotRun: "لم يُشغَّل",
-    srScoreSecOrder: "ترتيب القراءة", srScoreSecLive: "المناطق الحية", srScoreSecFocus: "تتبّع التركيز", srScoreSecLang: "اللغة", srScoreSecAx: "شجرة المتصفح", srScoreSecCmp: "ثنائي اللغة",
+    srScoreSecOrder: "ترتيب القراءة", srScoreSecLive: "المناطق الحية", srScoreSecFocus: "تتبّع التركيز", srScoreSecLang: "اللغة", srScoreSecNtc: "التباين غير النصي", srScoreSecAx: "شجرة المتصفح", srScoreSecCmp: "ثنائي اللغة",
     srSecCmp: "مقارنة النسختين (عربي/إنجليزي)", srCmp: "قارن", srCmpRunning: "جارٍ تحميل صفحة اللغة الأخرى في تبويب مخفي ومقارنتها…",
     srCmpUrlPh: "https://…/en/ — رابط النسخة باللغة الأخرى",
     srCmpNote: "يحمّل صفحة اللغة الأخرى في تبويب مخفي ويقارن شجرتي إمكانية الوصول: عناصر التحكم، الأسماء، تسميات المعالم، المناطق الحية ومستويات العناوين الموجودة في جهة واحدة فقط، إضافة إلى lang/dir في كل جهة.",
@@ -394,6 +433,17 @@ const STR = {
     srMsgLinkAsBtnCurrent: (what, crumb) => `${what} على عنصر ${crumb ? "مسار التنقل" : "ترقيم الصفحات"} الحالي — يُعلَن «رابط في الصفحة نفسها» مع أنه لا يذهب إلى أي مكان؛ لا يسمع قارئ الشاشة «الصفحة الحالية» أبداً`,
     srMsgLinkAsBtnNav: (what, crumb) => `${what} داخل ${crumb ? "مسار تنقل" : "ترقيم صفحات"} — يُعلَن «رابط في الصفحة نفسها» ويقفز Enter إلى أعلى الصفحة بدل التنقل`,
     srMsgLinkAsBtnHandler: (what) => `${what} مع معالج نقر — يُعلَن «رابط في الصفحة نفسها» لا زراً، ويمرّر Enter إلى أعلى الصفحة قبل تشغيل السكربت`,
+    srMsgGroupNoLabel: (n, kind, hint) => `${n} عناصر ${kind === "radio" ? "اختيار مفرد" : "مربع اختيار"} تشكّل مجموعة بلا اسم — لا <fieldset>/<legend> ولا role="group" بتسمية${hint ? ` (النص الظاهر «${hint}» غير مرتبط)` : ""}؛ يعلن قارئ الشاشة كل عنصر بنصه فقط دون موضوع الاختيار`,
+    srMsgNontextContrast: (ratio, kind, color, bg) => `تباين غير نصي ${ratio}:1 — ${kind === "border" ? "الحدود" : kind === "background" ? "خلفية العنصر" : "الأيقونة"} ${color} على ${bg}؛ حدود عنصر التحكم أو مؤشر حالته أو أيقونته تحتاج 3:1 (WCAG 1.4.11)`,
+    srMsgFocusRingLowContrast: (kind, color, ratio, bg) => `حلقة التركيز (${kind} ${color}) تباينها ${ratio}:1 مع خلفيتها ${bg} — المطلوب 3:1 (WCAG 2.4.11 / 1.4.11)`,
+    srMsgFocusRingThin: (w, kind) => `سماكة حلقة التركيز ${w}px فقط (${kind}) — استخدم 2px على الأقل لتُلاحظ`,
+    srMsgFocusRingClipped: (overflow, sel, kind, extent) => `حلقة التركيز مقطوعة بعنصر أصل له overflow:${overflow} (${sel}) — تمتد ${kind} مسافة ${extent}px خارج العنصر`,
+    srMsgWidgetNoArrow: (keys, widget, container) => `عنصر مخصّص: ${keys} لم تغيّر شيئاً داخل role="${widget}" (${container}) — لا انتقال للتركيز ولا تغيّر في حالة aria أو DOM خلال 150 مللي ثانية؛ مستخدم لوحة المفاتيح عالق عند العنصر الأول (تلميح من مفاتيح اصطناعية — تحقّق بلوحة مفاتيح حقيقية)`,
+    srMsgWidgetNoEnterSpace: (keys, haspopup, widget) => `عنصر مخصّص: ${keys} لم تغيّر شيئاً في ${haspopup ? "aria-haspopup=\"" + haspopup + "\" " : ""}${widget} هذا — تحقّق يدوياً — المفاتيح الاصطناعية لا تشغّل التفعيل الأصلي، لكن div/span بمعالج نقر فقط لا يُفتح أبداً لمستخدمي لوحة المفاتيح`,
+    srMsgWidgetEscNoClose: (changed) => `عنصر مخصّص: النافذة المنبثقة التي فتحها Enter لم تُغلق بـ Escape (${changed || "بلا تغيير"} خلال 150 مللي ثانية) — ينتهي المستخدم بضغط Escape مرتين أو الخروج بـ Tab (تلميح من مفاتيح اصطناعية — تحقّق يدوياً)`,
+    srMsgQuestionNotAssoc: (names, q) => `أزرار ${names} غير مرتبطة بالسؤال «${q}» — في قائمة الأزرار (أو عند الوصول إليها بـ Tab مباشرة) يعلن قارئ الشاشة ${names} فقط دون ما يُسأل عنه؛ لفّها في role="group" مع aria-labelledby يشير إلى السؤال`,
+    srMsgLabelNotAssoc: (lbl, name) => `التسمية الظاهرة «${lbl}» غير مرتبطة بالحقل — يُعلَن ${name ? `«${name}»` : "حقلاً بلا اسم"} بدلاً منها؛ استخدم <label for> ليكون النص المجاور للحقل هو ما يسمعه قارئ الشاشة (والتحكم الصوتي)`,
+    srApplyGroupLabel: "تسمية المجموعة", srApplyFieldLabel: "تسمية الحقل",
     presetComboBp: "أفضل الممارسات", presetComboSr: "قارئ الشاشة", srStateLbl: "الحالة",
     srMoreRows: (n) => `…و${n} صف/صفوف أخرى.`, srOrderBuilt: (n) => n ? `بُني ترتيب القراءة — ${n} مشكلة/مشاكل لقارئ الشاشة` : "بُني ترتيب القراءة — لا مشاكل تسمية",
     srFindingsAdded: (n, title) => `أُضيفت ${n} نتيجة/نتائج إلى «${title}» — راجع تبويب الاختبارات اليدوية.`,
@@ -2413,7 +2463,7 @@ function renderFindingForm(test, card, body, state, q) {
         }
       }, 500);
     } catch (err) {
-      pickedEl.textContent = "Pick failed: " + (err?.message || err);
+      pickedEl.textContent = t("srPickFailed") + (err?.message || err);
     }
   });
 
@@ -2956,13 +3006,13 @@ const HELP_TOPICS = [
   },
   {
     icon: "🔊", title: "Screen reader tab",
-    what: "Five checks for what a screen reader actually receives. Reading order: every node with the role, accessible name and state axe-core computes, flagging unnamed controls, generic 'click here' links, placeholder-only fields, duplicate names, unlabelled clickable divs, aria-hidden focusables and missing state on custom controls — state-missing (a tab without aria-selected, a button/option/checkbox/switch whose 'active'/'selected'/'open' class token has no aria-pressed/selected/checked/expanded — Tailwind variants like active:bg-blue-800 and native <summary> are ignored), required-not-exposed (a single visible '*' or 'required'/'مطلوب' before a field with neither required nor aria-required — password masks and footnotes after the form do not count), readonly-misuse (readonly on a real date/time/combobox picker — a picker class, date input type or calendar button — the user is meant to change; a display-only created_date is fine) and stepper-no-state (a stepper/wizard list with tick icons, icons on some steps only or 'done'/'active' classes but no aria-current=\"step\" and no hidden 'Step 2 of 4, completed' text; a 'how it works' list with an icon on every item is not flagged). Link behaviour: link-new-window (target=\"_blank\" — also formtarget on a button — with no 'opens in a new tab' in the name, title, aria-describedby or hidden text), link-download-hint (a .pdf/.docx/.xlsx/.zip/.csv or download link whose name gives neither the file type/size nor 'download'), link-external-hint (a link to another host with no 'external' hint) and link-as-button (serious: <a href=\"#\">, href=\"\" or javascript: — announced as 'same page link' — with a click handler or toggle/framework attribute, inside a pagination/breadcrumb, or on the current breadcrumb/pagination item; a bare 'Back to top' href=\"#\" is fine, and same-site subdomains such as eservices.mohre.gov.ae never count as external), each with a hidden-span / <button type=\"button\"> / aria-current=\"page\" fix and an Apply-on-page quick fix. Live regions: a monitor that classifies every DOM change as ANNOUNCED, VIA FOCUS, MAY BE MISSED or SILENT, logs state-not-announced when a click only toggles a state class (or shows/hides the aria-controls / next-sibling target) without any aria-* state change on the control (naming the missing aria-expanded/selected/pressed/checked/current), and watches SPA route changes (pushState/replaceState, popstate, hashchange, title changes): 1.5 s after the URL changes it logs a NAVIGATION entry — route-silent (same title, focus did not move, nothing announced), route-title-stale (document.title unchanged), route-h1-dup (same H1 as the previous page), route-focus-stuck (focus stranded mid-page or on a removed element) or route-ok — with React Router / Vue Router fix snippets (set document.title, focus the H1 with tabindex=-1, a role=\"status\" route announcer). In-page anchors (skip links, 'Back to top', #section links to an existing element) are not route changes; a query-only change (?page=2, sort/filter) keeps its title and H1 and is only noted as a minor route-silent when content re-rendered without an announcement. Focus trace: every focus move with its announced role/name, flagging focus lost to <body>, focus escaping a modal, hidden or unnamed targets; ⌨ Auto-walk moves focus through every Tab stop in real Tab order (positive tabindex first, then DOM order, shadow roots included, up to 400 stops) and reports stops the keyboard cannot reach, order jumps caused by positive tabindex, and trap candidates to verify by hand. Language: Arabic text under lang=\"en\" (and vice versa), missing/invalid lang and dir. Browser tree: the real accessibility tree via the DevTools protocol (Chromium, opt-in). Every fix snippet follows the framework chosen in Options — plain HTML, React/JSX (htmlFor, className, onKeyDown, self-closing tags, useRef + useEffect for focus and showModal) or Vue (@click/@keydown, ref + $refs.dlg.showModal(), v-if hints) — and the 'Change to' header names the active framework. Repeated findings with the same markup shape (tag, classes, role, issue codes) collapse into one row with a '×N identical' badge, one fix and a collapsible list of the N selectors; on UAE DLS pages the group is labelled with the aegov-* component ('aegov-card · link'). Groups carry through to the Manual test findings and the exports (instances + selectors). A score card at the top (0–100, PASS/WARN/FAIL like the DLS report) weighs every finding by severity — duplicate names count once per group, silent live updates weigh most — lists the Top 5 things to fix, and is stored per URL so the History section shows the trend. Mechanical fixes (aria-label / alt / tabindex / inert / dir / lang attributes, role=\"status\" on a silent region, div→button retag, a <span lang> wrapper) have an 'Apply on page' button — with an inline text box for names you must choose — that changes the live page, re-runs the check and marks the row ✓ fixed when the issue is gone; Undo restores the original element. Changes live only until the page reloads. 'Hear it': every reading-order, browser-tree and focus-trace row has a 🔈 button that speaks what a screen reader would say (\"Your name, edit text, required\") through the browser's speech synthesis, using an Arabic or English voice per the element's lang; ▶ Play page reads the listed rows top to bottom while highlighting each element on the page, with a 0.8–2× rate slider; live-log entries speak their announced text with the politeness prefix. Bilingual comparison: enter the URL of the other-language version (guessed from /ar/ ↔ /en/, ?lang= or an ar./en. host prefix) and Compare loads it in a hidden tab, then lists what differs between the two accessibility trees — controls present in one language only, controls or landmarks named in one and unnamed in the other, live regions missing on one side, heading counts per level, and html lang/dir on each side — with fixes, a difference count in the score and the exports.",
+    what: "Six checks for what a screen reader (and a low-vision keyboard user) actually receives. Reading order: every node with the role, accessible name and state axe-core computes, flagging unnamed controls, generic 'click here' links, placeholder-only fields, duplicate names, unlabelled clickable divs, aria-hidden focusables and missing state on custom controls — state-missing (a tab without aria-selected, a button/option/checkbox/switch whose 'active'/'selected'/'open' class token has no aria-pressed/selected/checked/expanded — Tailwind variants like active:bg-blue-800 and native <summary> are ignored), required-not-exposed (a single visible '*' or 'required'/'مطلوب' before a field with neither required nor aria-required — password masks and footnotes after the form do not count), readonly-misuse (readonly on a real date/time/combobox picker — a picker class, date input type or calendar button — the user is meant to change; a display-only created_date is fine) and stepper-no-state (a stepper/wizard list with tick icons, icons on some steps only or 'done'/'active' classes but no aria-current=\"step\" and no hidden 'Step 2 of 4, completed' text; a 'how it works' list with an icon on every item is not flagged). Form group labelling: group-no-label (serious: two or more checkbox/radio controls sharing a name or a wrapper with no <fieldset>/<legend> and no named role=\"group\"/\"radiogroup\" — a fieldset named by aria-label/aria-labelledby counts, an 'Other: [text]' field inside the fieldset does not un-name it, a shared name across two labelled fieldsets is two groups, two unrelated checkboxes side by side are not a set; the visible heading is offered as the group name; groups inside tables, menus and listboxes are skipped), question-not-associated (moderate: text ending in '?' followed by two or more visible, adjacent generic Yes/No/OK/Cancel/نعم/لا buttons with no role=\"group\" or dialog aria-labelledby, aria-describedby or a fieldset legend tying them together) and label-not-associated (serious: a <label> without for, or a span/div with a 'label' class or ending in ':', next to a field that has no accessible name or a different one — a placeholder-only name counts as different), with fieldset/legend, role=\"group\" aria-labelledby and <label for> fixes that reuse the visible text. Link behaviour: link-new-window (target=\"_blank\" — also formtarget on a button — with no 'opens in a new tab' in the name, title, aria-describedby or hidden text), link-download-hint (a .pdf/.docx/.xlsx/.zip/.csv or download link whose name gives neither the file type/size nor 'download'), link-external-hint (a link to another host with no 'external' hint) and link-as-button (serious: <a href=\"#\">, href=\"\" or javascript: — announced as 'same page link' — with a click handler or toggle/framework attribute, inside a pagination/breadcrumb, or on the current breadcrumb/pagination item; a bare 'Back to top' href=\"#\" is fine, and same-site subdomains such as eservices.mohre.gov.ae never count as external), each with a hidden-span / <button type=\"button\"> / aria-current=\"page\" fix and an Apply-on-page quick fix. Live regions: a monitor that classifies every DOM change as ANNOUNCED, VIA FOCUS, MAY BE MISSED or SILENT, logs state-not-announced when a click only toggles a state class (or shows/hides the aria-controls / next-sibling target) without any aria-* state change on the control (naming the missing aria-expanded/selected/pressed/checked/current), and watches SPA route changes (pushState/replaceState, popstate, hashchange, title changes): 1.5 s after the URL changes it logs a NAVIGATION entry — route-silent (same title, focus did not move, nothing announced), route-title-stale (document.title unchanged), route-h1-dup (same H1 as the previous page), route-focus-stuck (focus stranded mid-page or on a removed element) or route-ok — with React Router / Vue Router fix snippets (set document.title, focus the H1 with tabindex=-1, a role=\"status\" route announcer). In-page anchors (skip links, 'Back to top', #section links to an existing element) are not route changes; a query-only change (?page=2, sort/filter) keeps its title and H1 and is only noted as a minor route-silent when content re-rendered without an announcement. Focus trace: every focus move with its announced role/name, flagging focus lost to <body>, focus escaping a modal, hidden or unnamed targets, and — for every :focus-visible stop — the focus ring the sighted user sees (outline, else the most visible ring-shaped box-shadow layer, else a border-colour change against the un-focused border; over a background image the contrast is 'unknown', not measured against white): focus-ring-low-contrast (serious: ring colour under 3:1 against the effective background, ratio shown), focus-ring-thin (minor: under 2px) and focus-ring-clipped (moderate: an overflow hidden/auto/scroll ancestor cuts off the ring + outline-offset — calendar grids, carousels, scrollable tables), with a 'ring: outline 1px · 1.4:1' badge on the row and :focus-visible / wrapper-padding fixes; ⌨ Auto-walk moves focus through every Tab stop in real Tab order (positive tabindex first, then DOM order, shadow roots included, up to 400 stops) and reports stops the keyboard cannot reach, order jumps caused by positive tabindex, and trap candidates to verify by hand; on every stop that is (or is inside) a custom widget — role=\"tablist\"/\"radiogroup\"/\"listbox\"/\"menu\"/\"menubar\"/\"tree\"/\"grid\"/\"combobox\", an aria-haspopup trigger or a div/span with role=\"button\" — it also presses synthetic ArrowRight, ArrowDown, ArrowLeft, ArrowUp (until one moves), Enter, Space and Escape (on whatever holds focus, then on the popup) and watches 150 ms for a focus move, an aria-selected/expanded/checked/activedescendant change, a popup (listbox/menu/dialog/grid becoming visible) or any DOM change: widget-no-arrow-nav (serious: arrows changed nothing in a tablist/radiogroup/listbox/menu — roving tabindex + keydown fix, React/Vue variants), widget-no-enter-space (moderate: Enter and Space changed nothing on a role=\"button\" div, combobox or aria-haspopup trigger — verify manually, synthetic keys cannot trigger native activation) and widget-esc-no-close (moderate: the popup Enter opened stayed open after Escape). These are hints, not proof: native <select>, date inputs, contenteditable, submit buttons, Enter inside a <form>, native <button>/<a href>/<input> triggers (the browser turns Enter/Space into a click) and div buttons named Delete/Logout/Submit/Pay/Accept (the probe runs real handlers) are skipped, the page is restored after each probe (Escape, blur, re-focus) and at most 40 widgets are probed. Language: Arabic text under lang=\"en\" (and vice versa), missing/invalid lang and dir. Non-text contrast (WCAG 1.4.11, no axe rule): every visible form control, icon-only button/link and custom toggle (role=\"switch\", .toggle/.switch) is measured — every visible border side, the control's own background where it differs from its surroundings, and the strongest SVG fill/stroke or icon-font colour; the best of them decides, so a faint decorative border on an icon button with a dark glyph passes — against the effective background behind it (a photo or gradient behind the control is skipped as unknown); under 3:1 is nontext-contrast (serious) with both swatches, the ratio and a border-color / fill / background-color fix at a passing colour (nearest DLS token with 'DLS colors' on); disabled controls, native widgets the browser paints and children of a failed control are skipped. Browser tree: the real accessibility tree via the DevTools protocol (Chromium, opt-in). Every fix snippet follows the framework chosen in Options — plain HTML, React/JSX (htmlFor, className, onKeyDown, self-closing tags, useRef + useEffect for focus and showModal) or Vue (@click/@keydown, ref + $refs.dlg.showModal(), v-if hints) — and the 'Change to' header names the active framework. Repeated findings with the same markup shape (tag, classes, role, issue codes) collapse into one row with a '×N identical' badge, one fix and a collapsible list of the N selectors; on UAE DLS pages the group is labelled with the aegov-* component ('aegov-card · link'). Groups carry through to the Manual test findings and the exports (instances + selectors). A score card at the top (0–100, PASS/WARN/FAIL like the DLS report) weighs every finding by severity — duplicate names count once per group, silent live updates weigh most — lists the Top 5 things to fix, and is stored per URL so the History section shows the trend. Mechanical fixes (aria-label / alt / tabindex / inert / dir / lang attributes, role=\"status\" on a silent region, div→button retag, a <span lang> wrapper) have an 'Apply on page' button — with an inline text box for names you must choose — that changes the live page, re-runs the check and marks the row ✓ fixed when the issue is gone; Undo restores the original element. Changes live only until the page reloads. 'Hear it': every reading-order, browser-tree and focus-trace row has a 🔈 button that speaks what a screen reader would say (\"Your name, edit text, required\") through the browser's speech synthesis, using an Arabic or English voice per the element's lang; Play page reads the listed rows top to bottom while highlighting each element on the page, with a 0.8–2× rate slider. Playback is scoped: the filter box and 'issues only' decide which rows play (the Play button's tooltip says 'Play n rows'), every row has 'Play from here' (this row to the end) and 'Play this section' (this row and the rows nested under it — a card, a navigation, a form), 'Play from element' lets you click an element on the page and starts from its row, and while playing Space pauses/resumes and Esc stops; live-log entries speak their announced text with the politeness prefix. Bilingual comparison: enter the URL of the other-language version (guessed from /ar/ ↔ /en/, ?lang= or an ar./en. host prefix) and Compare loads it in a hidden tab, then lists what differs between the two accessibility trees — controls present in one language only, controls or landmarks named in one and unnamed in the other, live regions missing on one side, heading counts per level, and html lang/dir on each side — with fixes, a difference count in the score and the exports.",
     benefit: "Most screen reader bugs are naming and state-sequence problems that a DOM snapshot cannot reveal. These turn 'did it announce?' from a memory test into evidence you can click, and drop straight into the Manual test findings and exports.",
     example: "You start the live monitor, submit a form empty, and the log shows the red error text as SILENT. The fix is one role=\"alert\" on the container — verified by re-submitting and seeing ANNOUNCED [assertive].",
   },
   {
     icon: "⌨", title: "Keyboard shortcuts & options",
-    what: "In the panel: S or Ctrl/⌘+Enter = run the active tab's audit (Overview: full audit), R = record/stop flow, H = highlight all, X = clear highlights, C = contrast, E = export menu, / = focus the active tab's filter box, I = toggle \"issues only\" on the Screen reader tab, Esc = close menus, 1–6 = switch tabs (Overview, Automated, DLS, Manual, Screen reader, Help). The 'SR rules' checkbox adds axe's experimental screen-reader rules (label-content-name-mismatch, p-as-heading, table-fake-caption, td-has-header, focus-order-semantics). The extension options page (right-click the toolbar icon → Options) sets the default WCAG level, flow scan interval, language (English/العربية with RTL layout) and the debugger permission for the browser accessibility tree.",
+    what: "In the panel: S or Ctrl/⌘+Enter = run the active tab's audit (Overview: full audit), R = record/stop flow, H = highlight all, X = clear highlights, C = contrast, E = export menu, / = focus the active tab's filter box, I = toggle \"issues only\" on the Screen reader tab, Esc = close menus, 1–6 = switch tabs (Overview, Automated, DLS, Manual, Screen reader, Help). While 'Hear it' playback is running on the Screen reader tab: Space = pause/resume (the current row stays highlighted), Esc = stop. The 'SR rules' checkbox adds axe's experimental screen-reader rules (label-content-name-mismatch, p-as-heading, table-fake-caption, td-has-header, focus-order-semantics). The extension options page (right-click the toolbar icon → Options) sets the default WCAG level, flow scan interval, language (English/العربية with RTL layout) and the debugger permission for the browser accessibility tree.",
     benefit: "Faster daily use, and defaults that match how your team works.",
     example: "Set Arabic in Options and the panel chrome flips to RTL for colleagues who prefer it.",
   },
@@ -3181,13 +3231,13 @@ const HELP_AR = {
   },
   "Screen reader tab": {
     title: "تبويب قارئ الشاشة",
-    what: "خمسة فحوص لما يصل فعلاً إلى قارئ الشاشة. ترتيب القراءة: كل عقدة مع الدور والاسم المتاح والحالة كما يحسبها axe-core، مع تعليم عناصر التحكم بلا اسم، وروابط \"اضغط هنا\" العامة، والحقول المسمّاة بالـ placeholder فقط، والأسماء المكررة، وعناصر div القابلة للنقر بلا دور، والعناصر القابلة للتركيز داخل aria-hidden، والحالة المفقودة في عناصر التحكم المخصصة — state-missing (تبويب بلا aria-selected، أو زر/خيار/مربع اختيار/مفتاح يحمل صنفاً كاملاً active/selected/open بلا aria-pressed/selected/checked/expanded — تُتجاهل متغيرات Tailwind مثل active:bg-blue-800 وعنصر summary الأصلي)، وrequired-not-exposed (نجمة \"*\" واحدة أو كلمة \"مطلوب\"/\"required\" ظاهرة قبل حقل بلا required ولا aria-required — لا تُحتسب أقنعة كلمة المرور ولا الحواشي بعد النموذج)، وreadonly-misuse (readonly على منتقي تاريخ/وقت/combobox حقيقي — صنف منتقي أو نوع إدخال تاريخ أو زر تقويم — يُفترض أن يغيّره المستخدم؛ حقل created_date للعرض فقط لا يُعلَّم)، وstepper-no-state (قائمة خطوات/معالج بأيقونات صح أو أيقونات على بعض الخطوات فقط أو أصناف done/active بلا aria-current=\"step\" ولا نص مخفي \"الخطوة 2 من 4، مكتملة\"؛ قائمة «كيف يعمل» بأيقونة على كل عنصر لا تُعلَّم). سلوك الروابط: link-new-window (target=\"_blank\" — أو formtarget على زر — دون عبارة «يُفتح في تبويب جديد» في الاسم أو title أو aria-describedby أو نص مخفي)، وlink-download-hint (رابط ‎.pdf/.docx/.xlsx/.zip/.csv أو download لا يذكر اسمه نوع الملف/حجمه ولا كلمة «تحميل»)، وlink-external-hint (رابط إلى مضيف آخر بلا تلميح «خارجي»)، وlink-as-button (خطير: ‎<a href=\"#\"> أو href=\"\" أو javascript: — يُعلَن «رابط في نفس الصفحة» — مع معالج نقر أو سمة تبديل/إطار عمل، أو داخل ترقيم صفحات/مسار تنقّل، أو على العنصر الحالي فيهما؛ رابط «العودة للأعلى» بـ href=\"#\" فقط سليم، والنطاقات الفرعية للموقع نفسه مثل eservices.mohre.gov.ae لا تُعدّ خارجية)، لكلٍّ منها إصلاح بنص مخفي أو ‎<button type=\"button\"> أو aria-current=\"page\" وزر «طبّق على الصفحة». المناطق الحية: مراقب يصنّف كل تغيير في DOM إلى مُعلَن أو عبر التركيز أو قد يُفوَّت أو صامت، ويسجّل state-not-announced عندما تبدّل نقرةٌ صنفَ الحالة فقط (أو تُظهر/تُخفي هدف aria-controls أو العنصر التالي) دون أي تغيير في سمات aria-* على عنصر التحكم (مع تسمية السمة الناقصة aria-expanded/selected/pressed/checked/current)، ويراقب تنقّلات تطبيقات الصفحة الواحدة (pushState/replaceState وpopstate وhashchange وتغيّر العنوان): بعد 1.5 ث من تغيّر URL يسجّل مدخل «تنقّل» — route-silent (نفس العنوان، لم ينتقل التركيز، لم يُعلَن شيء) أو route-title-stale (لم يتغير document.title) أو route-h1-dup (نفس H1 للصفحة السابقة) أو route-focus-stuck (تركيز عالق في منتصف الصفحة أو على عنصر أُزيل) أو route-ok — مع مقتطفات إصلاح لـ React Router / Vue Router (ضبط document.title، تركيز H1 بـ tabindex=-1، ومُعلِن مسار role=\"status\"). روابط داخل الصفحة (روابط التخطي و«العودة للأعلى» و#قسم يشير إلى عنصر موجود) ليست تغييرات مسار؛ وتغيير معاملات الاستعلام فقط (?page=2 أو الفرز/التصفية) يحتفظ بعنوانه وH1 ويُسجَّل فقط كـ route-silent طفيف عند إعادة رسم المحتوى دون إعلان. تتبّع التركيز: كل انتقال للتركيز مع الدور/الاسم المُعلَن، مع تعليم فقدان التركيز إلى body، وهروبه من النافذة الحوارية، ووقوعه على عناصر مخفية أو بلا اسم؛ و«⌨ جولة تلقائية» تنقل التركيز عبر كل محطات Tab بترتيب Tab الحقيقي (tabindex الموجب أولاً ثم ترتيب DOM، مع shadow roots، حتى 400 محطة) وتبلّغ عن المحطات التي لا تصلها لوحة المفاتيح، وقفزات الترتيب الناتجة عن tabindex الموجب، والمصائد المحتملة للتحقق منها يدوياً. اللغة: نص عربي تحت lang=\"en\" (والعكس)، وغياب/عدم صحة lang وdir. شجرة المتصفح: شجرة إمكانية الوصول الحقيقية عبر بروتوكول DevTools (Chromium، اختياري). كل مقتطف إصلاح يتبع إطار العمل المختار في الإعدادات — HTML عادي، أو React/JSX (htmlFor وclassName وonKeyDown ووسوم ذاتية الإغلاق وuseRef + useEffect للتركيز وshowModal) أو Vue (@click/@keydown وref + $refs.dlg.showModal() وتلميحات v-if) — ويُظهر عنوان \"غيّره إلى\" إطار العمل النشط. النتائج المكررة ذات الشكل نفسه (الوسم والأصناف والدور ورموز المشاكل) تُدمج في صف واحد بشارة \"×N متطابقة\" وإصلاح واحد وقائمة قابلة للطي بالمحددات الـN؛ وفي صفحات نظام التصميم الإماراتي تُسمّى المجموعة بمكوّن aegov-* (\"aegov-card · link\"). تنتقل المجموعات إلى نتائج الاختبار اليدوي والتصدير (عدد النسخ والمحددات). بطاقة الدرجة في الأعلى (0–100، ناجح/تحذير/راسب كتقرير نظام التصميم) تزن كل نتيجة حسب خطورتها — الأسماء المكررة تُحسب مرة لكل مجموعة، والتحديثات الحية الصامتة الأثقل — وتعرض أهم 5 إصلاحات، وتُحفظ لكل رابط ليعرض قسم السجل اتجاهها. الإصلاحات الميكانيكية (سمات aria-label / alt / tabindex / inert / dir / lang، وrole=\"status\" على منطقة صامتة، وتحويل div إلى button، وغلاف <span lang>) لها زر «طبّق على الصفحة» — مع حقل نصي للأسماء التي عليك اختيارها — يغيّر الصفحة الحية ويعيد الفحص ويعلّم الصف بـ✓ أُصلح عند اختفاء المشكلة؛ و«تراجع» يعيد العنصر الأصلي. التغييرات تبقى حتى إعادة تحميل الصفحة فقط. «اسمعه»: لكل صف في ترتيب القراءة وشجرة المتصفح وتتبّع التركيز زر 🔈 ينطق ما سيقوله قارئ الشاشة (\"الاسم، حقل نص، مطلوب\") عبر تركيب الكلام في المتصفح بصوت عربي أو إنجليزي حسب lang العنصر؛ زر ▶ تشغيل الصفحة يقرأ الصفوف المعروضة من الأعلى إلى الأسفل مع إبراز كل عنصر في الصفحة، مع شريط سرعة من 0.8 إلى 2×؛ وإدخالات سجل المناطق الحية تُنطق مع بادئة الأولوية. مقارنة النسختين: أدخل رابط النسخة باللغة الأخرى (يُخمَّن من /ar/ ↔ /en/ أو ?lang= أو بادئة المضيف ar./en.) واضغط «قارن» فتُحمَّل في تبويب مخفي وتُعرض الفروق بين شجرتي إمكانية الوصول — عناصر تحكم موجودة في لغة واحدة فقط، عناصر أو معالم مسمّاة في جهة وبلا اسم في الأخرى، مناطق حية غائبة في جهة، عدد العناوين لكل مستوى، وlang/dir في كل جهة — مع الإصلاحات، وعدد الفروق في الدرجة والتصدير.",
+    what: "ستة فحوص لما يصل فعلاً إلى قارئ الشاشة (ومستخدم لوحة المفاتيح ضعيف البصر). ترتيب القراءة: كل عقدة مع الدور والاسم المتاح والحالة كما يحسبها axe-core، مع تعليم عناصر التحكم بلا اسم، وروابط \"اضغط هنا\" العامة، والحقول المسمّاة بالـ placeholder فقط، والأسماء المكررة، وعناصر div القابلة للنقر بلا دور، والعناصر القابلة للتركيز داخل aria-hidden، والحالة المفقودة في عناصر التحكم المخصصة — state-missing (تبويب بلا aria-selected، أو زر/خيار/مربع اختيار/مفتاح يحمل صنفاً كاملاً active/selected/open بلا aria-pressed/selected/checked/expanded — تُتجاهل متغيرات Tailwind مثل active:bg-blue-800 وعنصر summary الأصلي)، وrequired-not-exposed (نجمة \"*\" واحدة أو كلمة \"مطلوب\"/\"required\" ظاهرة قبل حقل بلا required ولا aria-required — لا تُحتسب أقنعة كلمة المرور ولا الحواشي بعد النموذج)، وreadonly-misuse (readonly على منتقي تاريخ/وقت/combobox حقيقي — صنف منتقي أو نوع إدخال تاريخ أو زر تقويم — يُفترض أن يغيّره المستخدم؛ حقل created_date للعرض فقط لا يُعلَّم)، وstepper-no-state (قائمة خطوات/معالج بأيقونات صح أو أيقونات على بعض الخطوات فقط أو أصناف done/active بلا aria-current=\"step\" ولا نص مخفي \"الخطوة 2 من 4، مكتملة\"؛ قائمة «كيف يعمل» بأيقونة على كل عنصر لا تُعلَّم). تسمية مجموعات النماذج: group-no-label (خطير: عنصرا اختيار أو أكثر — مربعات اختيار أو اختيار مفرد — يتشاركان الاسم أو الحاوية بلا <fieldset>/<legend> ولا role=\"group\"/\"radiogroup\" مسمّى — fieldset المسمّى بـ aria-label/aria-labelledby يُحتسب، وحقل «أخرى: [نص]» داخل fieldset لا يلغي اسمه، والاسم المشترك بين fieldset مسمّيين يعني مجموعتين، ومربّعا اختيار غير مرتبطين متجاوران ليسا مجموعة — يُقترح العنوان الظاهر اسماً للمجموعة؛ وتُتجاهل المجموعات داخل الجداول والقوائم وlistbox)، وquestion-not-associated (متوسط: نص ينتهي بـ«؟» يليه زران عامّان أو أكثر نعم/لا/موافق/إلغاء/Yes/No بلا role=\"group\" مع aria-labelledby أو aria-describedby أو legend يربطهما به)، وlabel-not-associated (خطير: <label> بلا for، أو span/div بصنف label أو ينتهي بنقطتين، بجوار حقل بلا اسم متاح أو باسم مختلف — الاسم من placeholder فقط يُعدّ مختلفاً)، مع إصلاحات fieldset/legend وrole=\"group\" aria-labelledby و<label for> تعيد استخدام النص الظاهر. سلوك الروابط: link-new-window (target=\"_blank\" — أو formtarget على زر — دون عبارة «يُفتح في تبويب جديد» في الاسم أو title أو aria-describedby أو نص مخفي)، وlink-download-hint (رابط ‎.pdf/.docx/.xlsx/.zip/.csv أو download لا يذكر اسمه نوع الملف/حجمه ولا كلمة «تحميل»)، وlink-external-hint (رابط إلى مضيف آخر بلا تلميح «خارجي»)، وlink-as-button (خطير: ‎<a href=\"#\"> أو href=\"\" أو javascript: — يُعلَن «رابط في نفس الصفحة» — مع معالج نقر أو سمة تبديل/إطار عمل، أو داخل ترقيم صفحات/مسار تنقّل، أو على العنصر الحالي فيهما؛ رابط «العودة للأعلى» بـ href=\"#\" فقط سليم، والنطاقات الفرعية للموقع نفسه مثل eservices.mohre.gov.ae لا تُعدّ خارجية)، لكلٍّ منها إصلاح بنص مخفي أو ‎<button type=\"button\"> أو aria-current=\"page\" وزر «طبّق على الصفحة». المناطق الحية: مراقب يصنّف كل تغيير في DOM إلى مُعلَن أو عبر التركيز أو قد يُفوَّت أو صامت، ويسجّل state-not-announced عندما تبدّل نقرةٌ صنفَ الحالة فقط (أو تُظهر/تُخفي هدف aria-controls أو العنصر التالي) دون أي تغيير في سمات aria-* على عنصر التحكم (مع تسمية السمة الناقصة aria-expanded/selected/pressed/checked/current)، ويراقب تنقّلات تطبيقات الصفحة الواحدة (pushState/replaceState وpopstate وhashchange وتغيّر العنوان): بعد 1.5 ث من تغيّر URL يسجّل مدخل «تنقّل» — route-silent (نفس العنوان، لم ينتقل التركيز، لم يُعلَن شيء) أو route-title-stale (لم يتغير document.title) أو route-h1-dup (نفس H1 للصفحة السابقة) أو route-focus-stuck (تركيز عالق في منتصف الصفحة أو على عنصر أُزيل) أو route-ok — مع مقتطفات إصلاح لـ React Router / Vue Router (ضبط document.title، تركيز H1 بـ tabindex=-1، ومُعلِن مسار role=\"status\"). روابط داخل الصفحة (روابط التخطي و«العودة للأعلى» و#قسم يشير إلى عنصر موجود) ليست تغييرات مسار؛ وتغيير معاملات الاستعلام فقط (?page=2 أو الفرز/التصفية) يحتفظ بعنوانه وH1 ويُسجَّل فقط كـ route-silent طفيف عند إعادة رسم المحتوى دون إعلان. تتبّع التركيز: كل انتقال للتركيز مع الدور/الاسم المُعلَن، مع تعليم فقدان التركيز إلى body، وهروبه من النافذة الحوارية، ووقوعه على عناصر مخفية أو بلا اسم، ولكل محطة :focus-visible حلقةَ التركيز التي يراها المستخدم المبصر (outline، وإلا أوضح طبقة box-shadow على شكل حلقة — ظلال الارتفاع المزاحة ليست حلقة — وإلا تغيّر لون الحد مقارنةً بالحد قبل التركيز؛ فوق صورة خلفية يُعرض التباين «مجهولاً» بدل قياسه على الأبيض): focus-ring-low-contrast (خطير: تباين لون الحلقة مع الخلفية الفعلية أقل من 3:1 مع عرض النسبة)، وfocus-ring-thin (طفيف: أقل من 2px)، وfocus-ring-clipped (متوسط: سلف بـ overflow hidden/auto/scroll يقصّ الحلقة مع outline-offset — شبكات التقويم والعارضات الدوّارة والجداول القابلة للتمرير) مع شارة «حلقة التركيز: outline 1px · 1.4:1» على الصف وإصلاحات :focus-visible / حشو الحاوية؛ و«⌨ جولة تلقائية» تنقل التركيز عبر كل محطات Tab بترتيب Tab الحقيقي (tabindex الموجب أولاً ثم ترتيب DOM، مع shadow roots، حتى 400 محطة) وتبلّغ عن المحطات التي لا تصلها لوحة المفاتيح، وقفزات الترتيب الناتجة عن tabindex الموجب، والمصائد المحتملة للتحقق منها يدوياً؛ وعند كل محطة تكون (أو تقع داخل) عنصراً مخصّصاً — role=\"tablist\"/\"radiogroup\"/\"listbox\"/\"menu\"/\"menubar\"/\"tree\"/\"grid\"/\"combobox\"، أو زر aria-haspopup، أو div/span بدور role=\"button\" — تضغط أيضاً مفاتيح اصطناعية ArrowRight وArrowDown وArrowLeft وArrowUp (حتى يحرّك أحدها التركيز) وEnter وSpace وEscape (على العنصر الذي يحمل التركيز ثم على القائمة المنبثقة) وتراقب 150 ملّي ثانية أي انتقال للتركيز أو تغيّر aria-selected/expanded/checked/activedescendant أو ظهور قائمة منبثقة (listbox/menu/dialog/grid) أو أي تغيّر في DOM: widget-no-arrow-nav (خطير: الأسهم لم تغيّر شيئاً داخل tablist/radiogroup/listbox/menu — إصلاح roving tabindex مع معالج keydown وبدائل React/Vue)، وwidget-no-enter-space (متوسط: Enter وSpace لم يغيّرا شيئاً في div بدور button أو combobox أو زر aria-haspopup — تحقّق يدوياً؛ المفاتيح الاصطناعية لا تُطلق التفعيل الأصلي)، وwidget-esc-no-close (متوسط: القائمة التي فتحها Enter لم تُغلق بـEscape). هذه تلميحات لا إثبات: تُتجاوز <select> الأصلية وحقول التاريخ وcontenteditable وأزرار الإرسال وEnter داخل <form> والمشغّلات الأصلية <button>/<a href>/<input> (المتصفح يحوّل Enter/Space إلى نقرة) وأزرار div المسمّاة حذف/خروج/إرسال/دفع/موافق (الفحص يشغّل المعالجات فعلاً)، وتُستعاد الصفحة بعد كل فحص (Escape ثم blur ثم إعادة التركيز)، وبحد أقصى 40 عنصراً. اللغة: نص عربي تحت lang=\"en\" (والعكس)، وغياب/عدم صحة lang وdir. التباين غير النصي (WCAG 1.4.11، لا قاعدة له في axe): يُقاس كل حقل نموذج مرئي وزر/رابط أيقوني ومفتاح تبديل مخصص (role=\"switch\" أو .toggle/.switch) — كل جانب حدود ظاهر، وخلفية العنصر نفسه حيث تختلف عن محيطها، وأقوى لون fill/stroke في SVG أو لون خط الأيقونة؛ الأفضل بينها هو الحكم، فإطار زخرفي باهت على زر أيقونة داكنة يجتاز — مقابل الخلفية الفعلية خلفه (صورة أو تدرّج خلف العنصر يُتجاوز كمجهول)؛ ما دون 3:1 يُعلَّم nontext-contrast (خطير) مع عيّنتي اللون والنسبة وإصلاح border-color / fill / background-color بلون ناجح (أقرب رمز DLS عند تفعيل «ألوان DLS»)؛ وتُتجاهل العناصر المعطّلة والعناصر الأصلية التي يرسمها المتصفح وأبناء عنصر فشل بالفعل. شجرة المتصفح: شجرة إمكانية الوصول الحقيقية عبر بروتوكول DevTools (Chromium، اختياري). كل مقتطف إصلاح يتبع إطار العمل المختار في الإعدادات — HTML عادي، أو React/JSX (htmlFor وclassName وonKeyDown ووسوم ذاتية الإغلاق وuseRef + useEffect للتركيز وshowModal) أو Vue (@click/@keydown وref + $refs.dlg.showModal() وتلميحات v-if) — ويُظهر عنوان \"غيّره إلى\" إطار العمل النشط. النتائج المكررة ذات الشكل نفسه (الوسم والأصناف والدور ورموز المشاكل) تُدمج في صف واحد بشارة \"×N متطابقة\" وإصلاح واحد وقائمة قابلة للطي بالمحددات الـN؛ وفي صفحات نظام التصميم الإماراتي تُسمّى المجموعة بمكوّن aegov-* (\"aegov-card · link\"). تنتقل المجموعات إلى نتائج الاختبار اليدوي والتصدير (عدد النسخ والمحددات). بطاقة الدرجة في الأعلى (0–100، ناجح/تحذير/راسب كتقرير نظام التصميم) تزن كل نتيجة حسب خطورتها — الأسماء المكررة تُحسب مرة لكل مجموعة، والتحديثات الحية الصامتة الأثقل — وتعرض أهم 5 إصلاحات، وتُحفظ لكل رابط ليعرض قسم السجل اتجاهها. الإصلاحات الميكانيكية (سمات aria-label / alt / tabindex / inert / dir / lang، وrole=\"status\" على منطقة صامتة، وتحويل div إلى button، وغلاف <span lang>) لها زر «طبّق على الصفحة» — مع حقل نصي للأسماء التي عليك اختيارها — يغيّر الصفحة الحية ويعيد الفحص ويعلّم الصف بـ✓ أُصلح عند اختفاء المشكلة؛ و«تراجع» يعيد العنصر الأصلي. التغييرات تبقى حتى إعادة تحميل الصفحة فقط. «اسمعه»: لكل صف في ترتيب القراءة وشجرة المتصفح وتتبّع التركيز زر 🔈 ينطق ما سيقوله قارئ الشاشة (\"الاسم، حقل نص، مطلوب\") عبر تركيب الكلام في المتصفح بصوت عربي أو إنجليزي حسب lang العنصر؛ زر تشغيل الصفحة يقرأ الصفوف المعروضة من الأعلى إلى الأسفل مع إبراز كل عنصر في الصفحة، مع شريط سرعة من 0.8 إلى 2×. التشغيل محدود النطاق: مربع التصفية و«المشاكل فقط» يحددان الصفوف التي تُنطق (تلميح زر التشغيل يقول «تشغيل n صف»)، ولكل صف زرا «التشغيل من هنا» (من هذا الصف إلى النهاية) و«تشغيل هذا القسم» (هذا الصف والصفوف المتداخلة تحته — بطاقة أو تنقّل أو نموذج)، وزر «التشغيل من عنصر» يتيح النقر على عنصر في الصفحة ليبدأ التشغيل من صفّه، وأثناء التشغيل تُوقف المسافة مؤقتاً/تستأنف وEsc يوقف؛ وإدخالات سجل المناطق الحية تُنطق مع بادئة الأولوية. مقارنة النسختين: أدخل رابط النسخة باللغة الأخرى (يُخمَّن من /ar/ ↔ /en/ أو ?lang= أو بادئة المضيف ar./en.) واضغط «قارن» فتُحمَّل في تبويب مخفي وتُعرض الفروق بين شجرتي إمكانية الوصول — عناصر تحكم موجودة في لغة واحدة فقط، عناصر أو معالم مسمّاة في جهة وبلا اسم في الأخرى، مناطق حية غائبة في جهة، عدد العناوين لكل مستوى، وlang/dir في كل جهة — مع الإصلاحات، وعدد الفروق في الدرجة والتصدير.",
     benefit: "معظم أخطاء قارئ الشاشة مشاكل تسمية وتسلسل حالات لا تكشفها لقطة DOM. تحوّل هذه الفحوص سؤال \"هل أُعلن؟\" من اختبار ذاكرة إلى دليل قابل للنقر، يُضاف مباشرة إلى نتائج الاختبار اليدوي والتصدير.",
     example: "تبدأ مراقبة المناطق الحية، ترسل نموذجاً فارغاً، فيُظهر السجل نص الخطأ الأحمر كـ\"صامت\". الإصلاح إضافة role=\"alert\" واحد على الحاوية — تتحقق بإعادة الإرسال ورؤية \"مُعلَن [assertive]\".",
   },
   "Keyboard shortcuts & options": {
     title: "اختصارات لوحة المفاتيح والإعدادات",
-    what: "في اللوحة: S أو Ctrl/⌘+Enter لتشغيل تدقيق التبويب النشط (نظرة عامة: التدقيق الكامل)، R تسجيل/إيقاف المسار، H تظليل الكل، X مسح التظليل، C التباين، E قائمة التصدير، / التركيز على مربع التصفية في التبويب النشط، I تبديل «المشاكل فقط» في تبويب قارئ الشاشة، Esc إغلاق القوائم، 1–6 تبديل التبويبات (نظرة عامة، الفحص الآلي، نظام التصميم، اليدوية، قارئ الشاشة، مساعدة). خانة \"قواعد قارئ الشاشة\" تضيف قواعد axe التجريبية الخاصة بقارئ الشاشة. صفحة الإعدادات (زر الفأرة الأيمن على أيقونة الإضافة ← Options) تضبط مستوى WCAG الافتراضي وإطار عمل المقتطفات وفاصل فحص المسار واللغة.",
+    what: "في اللوحة: S أو Ctrl/⌘+Enter لتشغيل تدقيق التبويب النشط (نظرة عامة: التدقيق الكامل)، R تسجيل/إيقاف المسار، H تظليل الكل، X مسح التظليل، C التباين، E قائمة التصدير، / التركيز على مربع التصفية في التبويب النشط، I تبديل «المشاكل فقط» في تبويب قارئ الشاشة، Esc إغلاق القوائم، 1–6 تبديل التبويبات (نظرة عامة، الفحص الآلي، نظام التصميم، اليدوية، قارئ الشاشة، مساعدة). أثناء تشغيل «اسمعه» في تبويب قارئ الشاشة: مسافة للإيقاف المؤقت/الاستئناف (يبقى الصف الحالي مُبرزاً)، وEsc للإيقاف. خانة \"قواعد قارئ الشاشة\" تضيف قواعد axe التجريبية الخاصة بقارئ الشاشة. صفحة الإعدادات (زر الفأرة الأيمن على أيقونة الإضافة ← Options) تضبط مستوى WCAG الافتراضي وإطار عمل المقتطفات وفاصل فحص المسار واللغة.",
     benefit: "استخدام يومي أسرع، وافتراضيات تناسب طريقة عمل فريقك.",
     example: "اختر العربية في الإعدادات فتنقلب اللوحة إلى RTL بمحتوى مترجم بالكامل.",
   },
@@ -3805,6 +3855,8 @@ const srFocusIssuesOnly = document.getElementById("srFocusIssuesOnly");
 const srWalkBtn = document.getElementById("srWalkBtn");
 const srWalkSummary = document.getElementById("srWalkSummary");
 const srLangBtn = document.getElementById("srLangBtn");
+const srNtcBtn = document.getElementById("srNtcBtn");
+const srNtcList = document.getElementById("srNtcList");
 const srCmpUrl = document.getElementById("srCmpUrl");
 const srCmpBtn = document.getElementById("srCmpBtn");
 const srCmpList = document.getElementById("srCmpList");
@@ -3812,6 +3864,7 @@ const srCmpStats = document.getElementById("srCmpStats");
 const srAxBtn = document.getElementById("srAxBtn");
 const srScoreCard = document.getElementById("srScoreCard");
 const srPlayBtn = document.getElementById("srPlayBtn");
+const srPlayPickBtn = document.getElementById("srPlayPickBtn");
 const srRateInput = document.getElementById("srRate");
 const srRateVal = document.getElementById("srRateVal");
 const srJourneySection = document.getElementById("srJourneySection");
@@ -3819,11 +3872,11 @@ const srJourneyList = document.getElementById("srJourneyList");
 const srJourneyCopyBtn = document.getElementById("srJourneyCopyBtn");
 const srJourneyStats = document.getElementById("srJourneyStats");
 
-/* ---- step list (six numbered sections) ----
+/* ---- step list (seven numbered sections) ----
    srSetStep(key, state, n) drives the li[data-state] + circle + state text; a step opens when it
    starts running or ends with issues/error, and closes again after a clean auto-opened run. */
-const SR_STEP_KEYS = { order: 1, live: 2, focus: 3, lang: 4, cmp: 5, ax: 6 };
-const SR_STEP_ICONS = { order: "i-list", live: "i-bell", focus: "i-keyboard", lang: "i-globe", cmp: "i-compare", ax: "i-tree" };
+const SR_STEP_KEYS = { order: 1, live: 2, focus: 3, lang: 4, ntc: 5, cmp: 6, ax: 7 };
+const SR_STEP_ICONS = { order: "i-list", live: "i-bell", focus: "i-keyboard", lang: "i-globe", ntc: "i-contrast", cmp: "i-compare", ax: "i-tree" };
 const srStepStates = {}; // key -> { state, n } (re-applied by applySrStrings)
 function srStepEl(key) { return srSteps ? srSteps.querySelector(`.step[data-step="${SR_STEP_KEYS[key]}"]`) : null; }
 function srSetStep(key, state, n = 0, force = false) {
@@ -3885,6 +3938,7 @@ const srState = {
   live: { running: false, poll: null, regions: [], log: [], startedByFlow: false },
   focus: { running: false, poll: null, log: [], startedByFlow: false, walking: false, walk: null },
   lang: null,
+  ntc: null,            // non-text contrast: { url, checked, issues }
   ax: null,
   cmp: null,            // 🌐↔ bilingual comparison: { url, otherUrl, differences, other: { order, lang } }
   applied: [],          // fixes applied in place: { section, key (selector used), cur (selector now), code }
@@ -4001,8 +4055,9 @@ function renderSrRows(rows, container, issuesOnly) {
     }
     if (r.sel) name.addEventListener("click", () => highlight([r.sel]));
     row.__srSpeech = { text: srAnnouncement(r), lang: srLangOf(r), sel: r.sel };
+    row.__srDepth = r.depth || 0;
     const spk = srSpeakBtn(row.__srSpeech);
-    if (spk) name.appendChild(spk);
+    if (spk) name.append(spk, srPlayFromBtn(row, container), srPlaySubtreeBtn(row, container));
     row.append(role, name);
     for (const i of r.issues) {
       const e = document.createElement("div");
@@ -4040,6 +4095,7 @@ function renderSrRows(rows, container, issuesOnly) {
     more.textContent = t("srMoreRows", shown.length - 700);
     container.appendChild(more);
   }
+  if (container === srOrderList) srUpdatePlayScope();
 }
 
 async function buildReadingOrder() {
@@ -4081,6 +4137,7 @@ function applySrFilter() {
   }
   const txt = rows.length ? t("srFilterCount", shown, rows.length) : "";
   if (srFilterCount.textContent !== txt) srFilterCount.textContent = txt;
+  srUpdatePlayScope();
 }
 srFilterInput.addEventListener("input", applySrFilter);
 // Sections re-render on their own schedule (polling logs, issues-only toggles) — re-apply the filter whenever a list changes.
@@ -4091,7 +4148,7 @@ let srFilterPending = false;
     srFilterPending = true;
     requestAnimationFrame(() => { srFilterPending = false; applySrFilter(); });
   });
-  for (const el of [srOrderList, srLiveLog, srFocusLog, srLangList, srCmpList, srAxList, srJourneyList]) mo.observe(el, { childList: true, subtree: true });
+  for (const el of [srOrderList, srLiveLog, srFocusLog, srLangList, srNtcList, srCmpList, srAxList, srJourneyList]) mo.observe(el, { childList: true, subtree: true });
 }
 srIssuesOnly.addEventListener("change", () => {
   if (srState.order) renderSrRows(srState.order.rows, srOrderList, srIssuesOnly.checked);
@@ -4302,6 +4359,8 @@ document.getElementById("srLiveClearBtn").addEventListener("click", () => { srSt
 
 /* ---- 3. focus trace ---- */
 
+// fix-snippet context for the focus-ring codes (colour / contrast / width measured on the page)
+const srRingCtx = (e) => e.ring ? { ringBg: e.ring.bg, ringColor: e.ring.color, ringContrast: e.ring.contrast, ringWidth: e.ring.width } : {};
 function renderFocusLog() {
   const log = srState.focus.log;
   srFocusLog.textContent = "";
@@ -4322,10 +4381,17 @@ function renderFocusLog() {
     const name = document.createElement("span");
     name.className = "sr-name" + (e.name ? "" : " empty");
     name.textContent = e.kind === "nav" ? e.text : e.name ? `"${e.name}"` : t("srScoreNoName");
-    if (e.states && e.states.length) {
+    if ((e.states && e.states.length) || e.ring) {
       const st = document.createElement("span");
       st.className = "sr-states";
-      for (const s of e.states) { const x = document.createElement("span"); x.textContent = s; st.appendChild(x); }
+      for (const s of e.states || []) { const x = document.createElement("span"); x.textContent = s; st.appendChild(x); }
+      if (e.ring) { // what the sighted keyboard user sees: "outline 1px · 1.4:1"
+        const x = document.createElement("span");
+        x.className = "sr-ring";
+        x.textContent = t("srRingFmt", e.ring.kind, e.ring.width, e.ring.contrast);
+        x.title = t("srRingTitle", e.ring.color, e.ring.bg);
+        st.appendChild(x);
+      }
       name.append(" ", st);
     }
     if (e.sel && e.kind !== "nav") {
@@ -4348,7 +4414,7 @@ function renderFocusLog() {
       c.appendChild(srCode(e.sel));
       srMoreAdd(row, c, "3");
     }
-    if (e.issues && e.issues.length) srAppendFixes(row, e.issues, { html: e.html, sel: e.sel, role: e.role, name: e.name, tag: e.tag, section: "focus" }, "3");
+    if (e.issues && e.issues.length) srAppendFixes(row, e.issues, { html: e.html, sel: e.sel, role: e.role, name: e.name, tag: e.tag, section: "focus", info: e.issues[0].info, container: e.issues[0].container, ...srRingCtx(e) }, "3");
     if (e.issues && e.issues.length && e.sel) row.dataset.srSel = e.sel;
     frag.appendChild(row);
   }
@@ -4416,6 +4482,17 @@ function srWalkEntries(r) {
     msg: `order jump: Tab arrived here from a later element (tabindex="${x.afterTabindex}" on ${x.after}) — the focus order no longer follows the page` }));
   for (const x of r.traps) out.push(mk(x, { level: "moderate", code: "possible-trap",
     msg: `possible trap: verify manually — focus is ${x.reason} (${x.container}); Tab/Shift+Tab and Escape must still leave it` }));
+  // custom widget keyboard probe (synthetic keys — hints, not proof)
+  for (const x of r.widgets || []) {
+    if (x.ok) continue;
+    const keys = (x.keys || []).map((k) => (k === " " ? "Space" : k)).join(" / ");
+    if (x.check === "arrow") out.push(mk(x, { level: "serious", code: "widget-no-arrow-nav", info: x.widget, container: x.container, msgKey: "srMsgWidgetNoArrow", msgArgs: [keys, x.widget, x.container],
+      msg: `custom widget: ${keys} changed nothing inside role="${x.widget}" (${x.container}) — no focus move, aria state or DOM change within 150 ms; a keyboard user is stuck on the first item (hint from synthetic keys — verify with a real keyboard)` }));
+    else if (x.check === "activate") out.push(mk(x, { level: "moderate", code: "widget-no-enter-space", info: x.widget, msgKey: "srMsgWidgetNoEnterSpace", msgArgs: [keys, x.haspopup, x.widget],
+      msg: `custom widget: ${keys} changed nothing on this ${x.haspopup ? "aria-haspopup=\"" + x.haspopup + "\" " : ""}${x.widget} — verify manually — synthetic keys cannot trigger native activation, but a div/span with a click-only handler never opens for keyboard users` }));
+    else if (x.check === "escape") out.push(mk(x, { level: "moderate", code: "widget-esc-no-close", info: x.widget, msgKey: "srMsgWidgetEscNoClose", msgArgs: [x.changed],
+      msg: `custom widget: the popup opened by Enter did not close on Escape (${x.changed || "no change"} within 150 ms) — users end up pressing Escape twice or Tab-ing out (hint from synthetic keys — verify by hand)` }));
+  }
   return out;
 }
 
@@ -4436,7 +4513,7 @@ async function focusWalk() {
     srState.focus.walk = r;
     srState.focus.log.push(...srWalkEntries(r));
     if (srState.focus.log.length > 400) srState.focus.log.splice(0, srState.focus.log.length - 400);
-    const bad = r.unreachable.length + r.jumps.length + r.traps.length;
+    const bad = r.unreachable.length + r.jumps.length + r.traps.length + (r.widgets || []).filter((w) => !w.ok).length;
     srWalkSummary.textContent = r.candidates ? t("srWalkSummary", r) : t("srWalkNone");
     srWalkSummary.classList.toggle("bad", bad > 0);
     srWalkSummary.hidden = false;
@@ -4536,6 +4613,78 @@ async function runLangCheck() {
   }
 }
 srLangBtn.addEventListener("click", runLangCheck);
+
+/* ---- 5. non-text contrast (WCAG 1.4.11): control borders, toggles, icons ---- */
+
+const srNtcFixCtx = (i) => ({ html: i.html, sel: i.sel, role: i.role, name: i.name, tag: i.tag, code: i.code, section: "ntc", ntcKind: i.kind, ntcProp: i.prop, ntcColor: i.color, ntcBg: i.bg, ntcRatio: i.ratio });
+
+function renderNtc(r) {
+  srNtcList.textContent = "";
+  document.getElementById("srNtcStats").textContent = t("srNtcStats", r);
+  if (!r.issues.length) { srEmpty(srNtcList, t("srNtcOk")); renderSrScore(); return; }
+  const frag = document.createDocumentFragment();
+  for (const i of r.issues) {
+    const row = document.createElement("div");
+    row.className = "sr-row has-issue level-" + i.level;
+    row.dataset.srSel = i.sel;
+    row.dataset.srCodes = i.code + " " + i.kind;
+    const tag = document.createElement("span");
+    tag.className = "sr-role";
+    tag.textContent = i.role || i.tag;
+    tag.title = i.code;
+    const body = document.createElement("span");
+    body.className = "sr-name";
+    const colors = document.createElement("span");
+    colors.className = "sr-ntc-colors";
+    colors.dir = "ltr";
+    const kind = document.createElement("span");
+    kind.className = "sr-ntc-kind";
+    kind.textContent = t("srNtcKind")[i.kind] || i.kind;
+    const c1 = document.createElement("code");
+    c1.textContent = i.color;
+    const c2 = document.createElement("code");
+    c2.textContent = i.bg;
+    const ratio = document.createElement("b");
+    ratio.className = "sr-ntc-ratio";
+    ratio.textContent = Number(i.ratio).toFixed(2) + ":1";
+    colors.append(kind, " ", swatch(i.color), c1, " " + t("srNtcOn") + " ", swatch(i.bg), c2, " · ", ratio);
+    body.append(colors, " ");
+    if (i.name) { const nm = document.createElement("span"); nm.className = "sr-lang-snippet"; nm.textContent = `“${i.name}”`; body.append(nm, " "); }
+    body.appendChild(srCode(i.sel));
+    const msg = document.createElement("div");
+    msg.className = "sr-issue " + i.level;
+    msg.textContent = srIssueMsg(i);
+    row.append(tag, body, msg);
+    const fctx = srNtcFixCtx(i);
+    const fix = srFixFor(i.code, fctx);
+    if (fix) srMoreAdd(row, srFixBlock(fix, fctx, i.msg), "2");
+    frag.appendChild(row);
+  }
+  srNtcList.appendChild(frag);
+  renderSrScore();
+}
+
+async function runNtcCheck() {
+  srNtcBtn.disabled = true;
+  srSetStep("ntc", "running");
+  statusBusy(t("srNtcRunning"));
+  try {
+    const r = await bg("nonTextContrast");
+    if (!r || r.error) throw new Error(r?.error || "no result");
+    srState.ntc = r;
+    srState.restored = null;
+    renderNtc(r);
+    srSetStep("ntc", r.issues.length ? "issues" : "done", r.issues.length);
+    srPersist();
+    statusEl.textContent = t("srNtcDone", r.issues.length);
+  } catch (err) {
+    srSetStep("ntc", "error");
+    statusEl.textContent = t("srNtcFailed") + (err?.message || err);
+  } finally {
+    srNtcBtn.disabled = false;
+  }
+}
+srNtcBtn.addEventListener("click", runNtcCheck);
 
 /* ---- 4b. bilingual AR/EN page comparison ----
    The other-language URL is loaded in a hidden tab by the background (op srCompare) and the two
@@ -4818,19 +4967,22 @@ const SR_LIVE_CODE_LEVEL = { "state-not-announced": "serious" };
 const srLiveWeight = (e) => SR_LIVE_CODE_W[e.code] || SR_LIVE_W[e.kind];
 const srLiveLevel = (e) => SR_LIVE_CODE_LEVEL[e.code] || SR_LIVE_LEVEL[e.kind];
 const SR_LANG_CAP = 30;
+const SR_NTC_W = 5, SR_NTC_CAP = 20; // one serious per control, capped so a long form cannot zero the score
+const SR_WIDGET_CAP = 15; // custom widget keyboard probe: serious 5 / moderate 2 (SR_W), capped — synthetic keys are hints, not proof
 const SR_SECTIONS = {
   order: { details: "srOrderSection", list: "srOrderList", label: "srScoreSecOrder" },
   live: { details: "srLiveSection", list: "srLiveLog", label: "srScoreSecLive" },
   focus: { details: "srFocusSection", list: "srFocusLog", label: "srScoreSecFocus" },
   lang: { details: "srLangSection", list: "srLangList", label: "srScoreSecLang" },
+  ntc: { details: "srNtcSection", list: "srNtcList", label: "srScoreSecNtc" },
   cmp: { details: "srCmpSection", list: "srCmpList", label: "srScoreSecCmp" },
   ax: { details: "srAxSection", list: "srAxList", label: "srScoreSecAx" },
 };
 const SR_CMP_W = 2, SR_CMP_CAP = 20;
 
 function srScoreCompute() {
-  const o = srState.order, l = srState.live, f = srState.focus, g = srState.lang, a = srState.ax, c = srState.cmp;
-  if (!o && !l.log.length && !f.log.length && !g && !a && !c) return null;
+  const o = srState.order, l = srState.live, f = srState.focus, g = srState.lang, a = srState.ax, c = srState.cmp, x = srState.ntc;
+  if (!o && !l.log.length && !f.log.length && !g && !a && !c && !x) return null;
   const groups = new Map(); // key -> { section, level, weight, count, sels, title, detail, once }
   const add = (key, section, level, weight, sel, title, detail, once) => {
     let grp = groups.get(key);
@@ -4899,17 +5051,23 @@ function srScoreCompute() {
     }
     breakdown.lang = g.issues.length;
   }
+  if (x) {
+    for (const i of x.issues) add("ntc|" + i.kind + "|" + (i.role || ""), "ntc", i.level, SR_NTC_W, i.sel, `${i.role || ""} ${i.name ? '"' + i.name + '"' : noName}`.trim(), i.msg);
+    for (const grp of groups.values()) if (grp.section === "ntc") grp.role = undefined;
+    breakdown.ntc = x.issues.length;
+  }
   if (c) {
     for (const d of c.differences) {
       add("cmp|" + d.code + "|" + (d.row.role || ""), "cmp", d.level, SR_CMP_W, d.side === "this" ? d.row.sel : "", `${d.row.role || ""} ${d.row.name ? '"' + d.row.name + '"' : ""}`.trim(), srCmpMsg(d));
     }
     breakdown.cmp = c.differences.length;
   }
-  let penalty = 0, langPenalty = 0, cmpPenalty = 0;
-  for (const grp of groups.values()) {
-    if (grp.section === "lang") langPenalty += grp.weight; else if (grp.section === "cmp") cmpPenalty += grp.weight; else penalty += grp.weight;
+  let penalty = 0, langPenalty = 0, cmpPenalty = 0, ntcPenalty = 0, widgetPenalty = 0;
+  for (const [key, grp] of groups) {
+    if (grp.section === "lang") langPenalty += grp.weight; else if (grp.section === "cmp") cmpPenalty += grp.weight; else if (grp.section === "ntc") ntcPenalty += grp.weight;
+    else if (key.startsWith("focus|widget-")) widgetPenalty += grp.weight; else penalty += grp.weight;
   }
-  penalty += Math.min(langPenalty, SR_LANG_CAP) + Math.min(cmpPenalty, SR_CMP_CAP);
+  penalty += Math.min(langPenalty, SR_LANG_CAP) + Math.min(cmpPenalty, SR_CMP_CAP) + Math.min(ntcPenalty, SR_NTC_CAP) + Math.min(widgetPenalty, SR_WIDGET_CAP);
   const score = Math.max(0, Math.round(100 - penalty));
   const verdict = score >= 90 ? "pass" : score >= 70 ? "warn" : "fail";
   const top = [...groups.values()].sort((x, y) => y.weight - x.weight || LEVEL_RANK[x.level] - LEVEL_RANK[y.level]).slice(0, 5)
@@ -5184,18 +5342,19 @@ srJourneyCopyBtn.addEventListener("click", async () => {
 /* ---- export / reset glue ---- */
 
 function srResultsForExport() {
-  const o = srState.order, l = srState.live, f = srState.focus, g = srState.lang, a = srState.ax, j = srState.journey, c = srState.cmp;
-  if (!o && !l.log.length && !f.log.length && !g && !a && !j && !c) return null;
+  const o = srState.order, l = srState.live, f = srState.focus, g = srState.lang, a = srState.ax, j = srState.journey, c = srState.cmp, x = srState.ntc;
+  if (!o && !l.log.length && !f.log.length && !g && !a && !j && !c && !x) return null;
   const sc = srScoreCompute();
   return {
     journey: j ? { duration: j.duration, pages: j.pages, transcript: srJourneyText(j),
       steps: j.steps.map((s) => ({ i: s.i, t: s.t, page: s.page, type: s.type, text: s.text, sel: s.sel, kind: s.kind, gaps: s.gaps.map((g) => g.msg) })),
       gaps: j.gaps.map((g) => ({ step: g.step, t: g.t, page: g.page, kind: g.kind, level: g.level, msg: g.msg, sel: g.sel })) } : null,
     score: sc ? { score: sc.score, verdict: sc.verdict, penalty: sc.penalty, breakdown: sc.breakdown, top: sc.top.map((e) => ({ title: e.title, section: e.section, level: e.level, weight: e.weight, count: e.count, sels: e.sels, detail: e.detail })) } : null,
-    readingOrder: o ? { url: o.url, summary: o.summary, issues: srGroupRows(o.rows).map((g) => { const r = g.row; return { sel: r.sel, role: r.role, name: r.name, html: r.html, component: g.component, instances: g.count, selectors: g.sels, code: r.issues[0].code, issues: r.issues.map((i) => i.level + ": " + i.msg), attr: r.issues[0].attr, info: r.issues[0].info, fix: srFixFor(r.issues[0].code, { html: r.html, sel: r.sel, role: r.role, name: r.name, tag: r.tag, attr: r.issues[0].attr, info: r.issues[0].info }) }; }) } : null,
+    readingOrder: o ? { url: o.url, summary: o.summary, issues: srGroupRows(o.rows).map((g) => { const r = g.row; return { sel: r.sel, role: r.role, name: r.name, html: r.html, component: g.component, instances: g.count, selectors: g.sels, code: r.issues[0].code, issues: r.issues.map((i) => i.level + ": " + i.msg), attr: r.issues[0].attr, info: r.issues[0].info, hint: r.issues[0].hint, fix: srFixFor(r.issues[0].code, { html: r.html, sel: r.sel, role: r.role, name: r.name, tag: r.tag, attr: r.issues[0].attr, info: r.issues[0].info, hint: r.issues[0].hint }) }; }) } : null,
     liveRegions: l.log.length || l.regions.length ? { regions: l.regions, log: l.log.map((e) => e.kind === "silent" || e.kind === "risky" || e.kind === "rerender" || srRouteIssue(e) ? { ...e, fix: srFixFor(e.code || e.kind, { html: e.html, sel: e.sel, text: e.text, tag: e.tag, attr: e.attr, target: e.target, titleAfter: e.titleAfter, h1After: e.h1After, url: e.url }) } : e) } : null,
-    focusTrace: f.log.length ? { moves: f.log.length, issues: f.log.filter((e) => e.issues && e.issues.length).map((e) => ({ t: e.t, sel: e.sel, role: e.role, name: e.name, html: e.html, code: e.issues[0].code, issues: e.issues.map((i) => i.level + ": " + i.msg), fix: srFixFor(e.issues[0].code, { html: e.html, sel: e.sel, role: e.role, name: e.name, tag: e.tag }) })) } : null,
+    focusTrace: f.log.length ? { moves: f.log.length, issues: f.log.filter((e) => e.issues && e.issues.length).map((e) => ({ t: e.t, sel: e.sel, role: e.role, name: e.name, html: e.html, code: e.issues[0].code, issues: e.issues.map((i) => i.level + ": " + i.msg), fix: srFixFor(e.issues[0].code, { html: e.html, sel: e.sel, role: e.role, name: e.name, tag: e.tag, info: e.issues[0].info, container: e.issues[0].container, ...srRingCtx(e) }) })) } : null,
     language: g ? { htmlLang: g.htmlLang, htmlDir: g.htmlDir, majority: g.majority, issues: g.issues.map((i) => ({ ...i, fix: srFixFor(i.type, { html: i.html, sel: i.sel, snippet: i.snippet, declared: i.declared, detected: i.type.startsWith("html-lang") ? g.majority : i.detected }) })) } : null,
+    nonTextContrast: x ? { checked: x.checked, issues: x.issues.map((i) => ({ ...i, fix: srFixFor(i.code, srNtcFixCtx(i)) })) } : null,
     bilingual: c ? { url: c.url, otherUrl: c.otherUrl, differences: c.differences.map((d) => { const other = (sel) => d.side === "this" || !sel ? sel : c.otherUrl + " " + sel; return { kind: d.kind, code: d.code, level: d.level, side: d.side, msg: srCmpMsg(d, true), role: d.row.role, name: d.row.name || "", sel: other(d.row.sel || ""), html: d.row.html || "", instances: d.count, selectors: (d.sels || []).map(other),
       fix: d.fixCode ? srFixFor(d.fixCode, { html: d.row.html, sel: d.row.sel, role: d.row.role, name: d.row.name, tag: d.row.tag, declared: d.declared, detected: d.detected }) : null }; }) } : null,
     browserTree: a ? { summary: a.summary, issues: srGroupRows(a.rows).map((g) => { const r = g.row; return { sel: r.sel, role: r.role, name: r.name, component: g.component, instances: g.count, selectors: g.sels, code: r.issues[0].code, issues: r.issues.map((i) => i.level + ": " + i.msg), fix: srFixFor(r.issues[0].code, { sel: r.sel, role: r.role, name: r.name }) }; }) } : null,
@@ -5247,6 +5406,11 @@ function srSectionHtml() {
     parts.push(`<p>Language: html lang="${escHtml(r.language.htmlLang || "")}" dir="${escHtml(r.language.htmlDir || "")}" — page is mostly ${escHtml(r.language.majority)}</p>` +
       block("Language / voice-switching issues", r.language.issues, (i) => `<div style="border-top:1px solid #eee;padding:6px 0"><b style="color:${color[i.level]}">${escHtml(i.type)}</b> ${i.snippet ? "“" + escHtml(i.snippet) + "” " : ""}<code style="background:#eef2f6;border-radius:3px;padding:0 4px">${escHtml(i.sel)}</code><div style="font-size:13px">${escHtml(i.msg)}</div>${fixHtml(i)}</div>`));
   }
+  if (r.nonTextContrast) {
+    const sw = (h) => `<span style="display:inline-block;width:11px;height:11px;border:1px solid #999;border-radius:2px;vertical-align:middle;background:${escHtml(h)}"></span>`;
+    parts.push(`<p>Non-text contrast (WCAG 1.4.11): ${r.nonTextContrast.checked} control(s) measured, ${r.nonTextContrast.issues.length} under 3:1</p>` +
+      block("Control borders, toggles and icons under 3:1", r.nonTextContrast.issues, (i) => `<div style="border-top:1px solid #eee;padding:6px 0"><b style="color:${color[i.level]}">${escHtml(i.role || i.tag)}</b> ${i.name ? "“" + escHtml(i.name) + "” " : ""}<span dir="ltr">${escHtml(i.kind)} ${sw(i.color)} <code>${escHtml(i.color)}</code> on ${sw(i.bg)} <code>${escHtml(i.bg)}</code> · <b>${Number(i.ratio).toFixed(2)}:1</b></span> <code style="background:#eef2f6;border-radius:3px;padding:0 4px">${escHtml(i.sel)}</code><div style="font-size:13px">${escHtml(i.msg)}</div>${fixHtml(i)}</div>`));
+  }
   if (r.bilingual) {
     const b = r.bilingual;
     parts.push(`<p>Bilingual comparison: <code style="background:#eef2f6;border-radius:3px;padding:0 4px">${escHtml(b.url)}</code> ↔ <code style="background:#eef2f6;border-radius:3px;padding:0 4px">${escHtml(b.otherUrl)}</code> — ${b.differences.length} difference(s)</p>` +
@@ -5260,7 +5424,7 @@ function srSectionHtml() {
   if (r.score) {
     const vc = { pass: "#2e7d32", warn: "#b68a35", fail: "#d32f2f" }[r.score.verdict];
     const vl = { pass: "PASS", warn: "WARN", fail: "FAIL" }[r.score.verdict];
-    const secLabel = { order: "reading order", live: "live regions", focus: "focus trace", lang: "language", cmp: "bilingual", ax: "browser tree" };
+    const secLabel = { order: "reading order", live: "live regions", focus: "focus trace", lang: "language", ntc: "non-text contrast", cmp: "bilingual", ax: "browser tree" };
     const counts = Object.keys(secLabel).map((k) => `${secLabel[k]}: ${r.score.breakdown[k] === undefined ? "not run" : r.score.breakdown[k] || "✓"}`).join(" · ");
     scoreHtml = `<div style="display:flex;gap:16px;align-items:flex-start;border:1px solid #ddd;border-radius:6px;padding:10px 14px;margin:8px 0">
     <div style="font-size:32px;font-weight:700;color:${vc};min-width:64px;text-align:center">${r.score.score}<div style="font-size:11px;font-weight:400;color:#666">of 100</div></div>
@@ -5280,7 +5444,7 @@ function srSectionHtml() {
 
 const srSpeech = {
   ok: !!(window.speechSynthesis && window.SpeechSynthesisUtterance),
-  playing: false, seq: 0, warned: new Set(), current: null,
+  playing: false, paused: false, seq: 0, warned: new Set(), current: null,
 };
 if (!srSpeech.ok) document.body.classList.add("no-speech");
 
@@ -5394,6 +5558,7 @@ function srSpeak(text, lng) {
     let ticks = 0;
     const tick = setInterval(() => {
       if (done) { clearInterval(tick); return; }
+      if (srSpeech.paused) return; // a paused engine reports speaking=false on some platforms — never time out while paused
       if (srSpeech.current !== u || (++ticks > 2 && !synth.speaking && !synth.pending)) { clearInterval(tick); finish(false); }
     }, 500);
   });
@@ -5403,20 +5568,43 @@ function srStopSpeech() {
   srSpeech.seq++;
   srSpeech.playing = false;
   srSpeech.current = null;
-  if (srSpeech.ok) { try { window.speechSynthesis.cancel(); } catch (_) {} }
+  if (srSpeech.ok) { try { if (srSpeech.paused) window.speechSynthesis.resume(); window.speechSynthesis.cancel(); } catch (_) {} }
+  srSpeech.paused = false;
   for (const el of document.querySelectorAll(".sr-speaking")) el.classList.remove("sr-speaking");
   for (const el of document.querySelectorAll(".sr-speak.speaking")) el.classList.remove("speaking");
-  srPlayBtn.textContent = t("srPlay");
-  srPlayBtn.classList.remove("playing");
+  setLabel(srPlayBtn, "i-play", t("srPlay"));
+  srPlayBtn.classList.remove("playing", "paused");
 }
 
-// 🔈 button for a row; `speech` is { text, lang, sel }. Hidden (not created) without speechSynthesis.
+// Space while playing: pause/resume (the current row stays highlighted); Esc: stop. Only while the SR tab is visible.
+function srTogglePause() {
+  if (!srSpeech.playing || !srSpeech.ok) return false;
+  const synth = window.speechSynthesis;
+  try {
+    if (srSpeech.paused) { synth.resume(); srSpeech.paused = false; srPlayBtn.classList.remove("paused"); statusEl.textContent = srSpeech.status || ""; }
+    else { synth.pause(); srSpeech.paused = true; srPlayBtn.classList.add("paused"); statusEl.textContent = t("srPaused"); }
+  } catch (_) { return false; }
+  return true;
+}
+document.addEventListener("keydown", (e) => {
+  if (!srSpeech.playing || document.body.dataset.view !== "sr") return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable) return;
+  if (e.key === "Escape") { e.preventDefault(); srStopSpeech(); statusEl.textContent = t("srPlayDone", srSpeech.played || 0); }
+  else if (e.key === " " || e.key === "Spacebar") { e.preventDefault(); srTogglePause(); }
+});
+// Space activates a focused button on keyup — swallow it so the Play button is not re-triggered by the pause key.
+document.addEventListener("keyup", (e) => {
+  if ((e.key === " " || e.key === "Spacebar") && srSpeech.playing && document.body.dataset.view === "sr" && e.target.tagName === "BUTTON") e.preventDefault();
+});
+
+// Speaker button for a row; `speech` is { text, lang, sel }. Hidden (not created) without speechSynthesis.
 function srSpeakBtn(speech) {
   if (!srSpeech.ok || !speech.text) return null;
   const b = document.createElement("button");
   b.type = "button";
   b.className = "sr-speak sr-speech";
-  b.textContent = "🔈";
+  b.appendChild(svgIcon("i-speaker"));
   b.title = t("srSpeak") + ": " + speech.text;
   b.setAttribute("aria-label", t("srSpeak"));
   b.addEventListener("click", async (ev) => {
@@ -5431,14 +5619,23 @@ function srSpeakBtn(speech) {
   return b;
 }
 
-// ▶ Play page: read the rendered reading-order rows (so "issues only" is respected) top to bottom.
-async function srPlayPage() {
-  if (srSpeech.playing) { srStopSpeech(); return; }
-  const rows = [...srOrderList.querySelectorAll(".sr-row")].filter((el) => el.__srSpeech && el.__srSpeech.text);
+// Rows that playback can reach: rendered ("issues only" is a render-time filter), not hidden by the SR filter box, and speakable.
+function srPlayableRows(container) {
+  return [...container.querySelectorAll(".sr-row")].filter((el) => !el.hidden && el.__srSpeech && el.__srSpeech.text);
+}
+function srUpdatePlayScope() {
+  const n = srPlayableRows(srOrderList).length;
+  srPlayBtn.title = n ? t("srPlayScope", n) : t("srPlayTitle");
+}
+
+// Read a list of row elements aloud, top to bottom, highlighting each element on the page. `label` names the scope in the status line.
+async function srPlayRows(rows, label) {
+  rows = (rows || []).filter((el) => el.__srSpeech && el.__srSpeech.text);
   if (!rows.length) { statusEl.textContent = t("srNothingToPlay"); return; }
   srStopSpeech();
   const my = ++srSpeech.seq;
   srSpeech.playing = true;
+  srSpeech.played = 0;
   setLabel(srPlayBtn, "i-stop", t("srStop"));
   srPlayBtn.classList.add("playing");
   let i = 0;
@@ -5448,15 +5645,112 @@ async function srPlayPage() {
     el.classList.add("sr-speaking");
     try { el.scrollIntoView({ block: "nearest" }); } catch (_) {}
     if (el.__srSpeech.sel) highlight([el.__srSpeech.sel]);
-    statusEl.textContent = t("srPlaying", i, rows.length);
+    srSpeech.status = t("srPlaying", i, rows.length, label);
+    statusEl.textContent = srSpeech.status;
     await srSpeak(el.__srSpeech.text, el.__srSpeech.lang);
+    srSpeech.played = i;
     el.classList.remove("sr-speaking");
   }
   if (srSpeech.seq !== my) return;
   srSpeech.playing = false;
+  srSpeech.paused = false;
   setLabel(srPlayBtn, "i-play", t("srPlay"));
-  srPlayBtn.classList.remove("playing");
+  srPlayBtn.classList.remove("playing", "paused");
   statusEl.textContent = t("srPlayDone", rows.length);
+}
+
+// Play page: every reachable reading-order row (the filter box and "issues only" scope the playback).
+async function srPlayPage() {
+  if (srSpeech.playing) { srStopSpeech(); return; }
+  await srPlayRows(srPlayableRows(srOrderList), "");
+}
+// "From here": this row and every following reachable row in the same list.
+function srRowsFrom(row, container) {
+  const all = [...container.querySelectorAll(".sr-row")];
+  const i = all.indexOf(row);
+  return i < 0 ? [] : all.slice(i).filter((el) => !el.hidden && el.__srSpeech && el.__srSpeech.text);
+}
+// "This section": this row plus the rows nested under it (depth greater than its own); grouped rows are one row already.
+function srRowsSubtree(row, container) {
+  const all = [...container.querySelectorAll(".sr-row")];
+  const i = all.indexOf(row);
+  if (i < 0) return [];
+  const out = [row];
+  const d = row.__srDepth || 0;
+  for (let j = i + 1; j < all.length; j++) {
+    if ((all[j].__srDepth || 0) <= d) break;
+    out.push(all[j]);
+  }
+  return out.filter((el) => !el.hidden && el.__srSpeech && el.__srSpeech.text);
+}
+function srRowBtn(cls, icon, key, onClick) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "sr-rowbtn sr-speech " + cls;
+  b.appendChild(svgIcon(icon));
+  b.title = t(key);
+  b.setAttribute("aria-label", t(key));
+  b.addEventListener("click", (ev) => { ev.stopPropagation(); onClick(); });
+  return b;
+}
+function srPlayFromBtn(row, container) {
+  return srRowBtn("sr-play-from", "i-play-from", "srPlayFrom", () => srPlayRows(srRowsFrom(row, container), t("srPlayingFrom")));
+}
+function srPlaySubtreeBtn(row, container) {
+  return srRowBtn("sr-play-subtree", "i-play-subtree", "srPlaySubtree", () => srPlayRows(srRowsSubtree(row, container), t("srPlayingSubtree")));
+}
+
+// "Play from element": pick on the page, then play from the row whose selector equals the picked one or is its closest ancestor.
+function srRowForSelector(sel, container) {
+  if (!sel) return null;
+  let best = null, bestLen = -1;
+  for (const el of container.querySelectorAll(".sr-row")) {
+    const s = el.__srSpeech && el.__srSpeech.sel;
+    if (!s) continue;
+    if (s === sel) return el;
+    if (sel.startsWith(s + " > ") && s.length > bestLen) { best = el; bestLen = s.length; }
+  }
+  return best;
+}
+let srPickPoll = null;
+async function srPlayFromPick() {
+  if (srSpeech.playing) srStopSpeech();
+  clearInterval(srPickPoll);
+  if (!srOrderList.querySelector(".sr-row")) { statusEl.textContent = t("srNothingToPlay"); return; }
+  try {
+    await bg("pickStart");
+  } catch (err) {
+    statusEl.textContent = t("srPickFailed") + (err?.message || err);
+    return;
+  }
+  statusEl.textContent = t("srPicking");
+  srPlayPickBtn.disabled = true;
+  let tries = 0;
+  srPickPoll = setInterval(async () => {
+    tries++;
+    try {
+      const sel = await bg("pickCheck");
+      if (sel) {
+        clearInterval(srPickPoll);
+        srPlayPickBtn.disabled = false;
+        const row = srRowForSelector(sel, srOrderList);
+        if (!row) { statusEl.textContent = t("srPickNoRow"); return; }
+        try { row.scrollIntoView({ block: "center" }); } catch (_) {}
+        row.classList.add("sr-flash");
+        setTimeout(() => row.classList.remove("sr-flash"), 1500);
+        const rows = srRowsFrom(row, srOrderList);
+        if (!rows.length) { statusEl.textContent = t("srPickNoRow"); return; }
+        srPlayRows(rows, t("srPlayingPick"));
+      } else if (tries > 60) {
+        clearInterval(srPickPoll);
+        srPlayPickBtn.disabled = false;
+        statusEl.textContent = t("srPickCancelled");
+      }
+    } catch (_) {
+      clearInterval(srPickPoll);
+      srPlayPickBtn.disabled = false;
+    }
+  }, 500);
 }
 
 function srApplyRate() {
@@ -5465,6 +5759,7 @@ function srApplyRate() {
   srRateVal.textContent = v.toFixed(1) + "×";
 }
 srPlayBtn.addEventListener("click", srPlayPage);
+srPlayPickBtn.addEventListener("click", srPlayFromPick);
 srRateInput.addEventListener("input", () => {
   settings.srRate = Math.min(Math.max(parseFloat(srRateInput.value) || 1, 0.8), 2);
   srRateVal.textContent = settings.srRate.toFixed(1) + "×";
@@ -5479,6 +5774,7 @@ async function srReset() {
   await Promise.allSettled([stopLive(), stopFocus()]);
   srState.order = null;
   srState.lang = null;
+  srState.ntc = null;
   srState.ax = null;
   srState.cmp = null;
   srState.live.log = [];
@@ -5494,9 +5790,10 @@ async function srReset() {
   srLiveRegions.textContent = "";
   srFocusLog.textContent = "";
   srLangList.textContent = "";
+  srNtcList.textContent = "";
   srCmpList.textContent = "";
   srAxList.textContent = "";
-  for (const id of ["srOrderStats", "srLiveStats", "srFocusStats", "srLangStats", "srCmpStats", "srAxStats"]) document.getElementById(id).textContent = "";
+  for (const id of ["srOrderStats", "srLiveStats", "srFocusStats", "srLangStats", "srNtcStats", "srCmpStats", "srAxStats"]) document.getElementById(id).textContent = "";
   srAddFindingsBtn.hidden = true;
   srState.restored = null;
   for (const key of Object.keys(SR_STEP_KEYS)) srSetStep(key, "idle");
@@ -5519,17 +5816,19 @@ function srOnNavigated() {
   // drop them so a stale score can't be shown or stored against the new URL.
   srState.order = null;
   srState.lang = null;
+  srState.ntc = null;
   srState.ax = null;
   srState.cmp = null;
   srState.focus.walk = null;
   srWalkSummary.hidden = true;
   srOrderList.textContent = "";
   srLangList.textContent = "";
+  srNtcList.textContent = "";
   srCmpList.textContent = "";
   srCmpUrl.value = "";
   srCmpPrefill().catch(() => {});
   srAxList.textContent = "";
-  for (const id of ["srOrderStats", "srLangStats", "srCmpStats", "srAxStats"]) document.getElementById(id).textContent = "";
+  for (const id of ["srOrderStats", "srLangStats", "srNtcStats", "srCmpStats", "srAxStats"]) document.getElementById(id).textContent = "";
   srAddFindingsBtn.hidden = true;
   renderSrScore();
   if (flowRecording) flowJourney.pages.push({ at, label: "" }); // labelled by the next flow scan
@@ -5601,7 +5900,7 @@ async function srResolveUrl() {
 }
 
 function srHasData() {
-  return !!(srState.order || srState.lang || srState.ax || srState.cmp || srState.live.log.length || srState.focus.log.length);
+  return !!(srState.order || srState.lang || srState.ntc || srState.ax || srState.cmp || srState.live.log.length || srState.focus.log.length);
 }
 
 // Called when the 🔊 tab is shown: restore the snapshot saved for this URL unless the
@@ -5662,7 +5961,7 @@ function srUpdateBadge(sc) {
 function applySrStrings() {
   setTabLabel("sr", "i-speaker", t("tabSr"));
   document.getElementById("srIntro").textContent = t("srIntro");
-  const secKey = { order: "srSecOrder", live: "srSecLive", focus: "srSecFocus", lang: "srSecLang", cmp: "srSecCmp", ax: "srSecAx" };
+  const secKey = { order: "srSecOrder", live: "srSecLive", focus: "srSecFocus", lang: "srSecLang", ntc: "srSecNtc", cmp: "srSecCmp", ax: "srSecAx" };
   for (const key of Object.keys(SR_STEP_KEYS)) {
     const li = srStepEl(key);
     if (!li) continue;
@@ -5693,13 +5992,18 @@ function applySrStrings() {
   srWalkBtn.title = t("srWalkTitle");
   if (srState.focus.walk && !srWalkSummary.hidden) srWalkSummary.textContent = srState.focus.walk.candidates ? t("srWalkSummary", srState.focus.walk) : t("srWalkNone");
   setLabel(srLangBtn, "i-globe", t("srLang"));
+  setLabel(srNtcBtn, "i-contrast", t("srNtc"));
+  document.getElementById("srNtcNote").textContent = t("srNtcNote");
+  if (srState.ntc) renderNtc(srState.ntc);
   setLabel(srAxBtn, "i-tree", t("srAx"));
   document.getElementById("srAxNote").textContent = t("srAxNote");
   setLabel(document.getElementById("srLiveClearBtn"), "i-eraser", t("srClearLog"));
   setLabel(document.getElementById("srFocusClearBtn"), "i-eraser", t("srClearLog"));
   document.querySelector("#srRulesLbl > .lbl").textContent = t("srRulesChk");
   if (srSpeech.playing) setLabel(srPlayBtn, "i-stop", t("srStop")); else setLabel(srPlayBtn, "i-play", t("srPlay"));
-  srPlayBtn.title = t("srPlayTitle");
+  srUpdatePlayScope();
+  setLabel(srPlayPickBtn, "i-pick", t("srPlayPick"));
+  srPlayPickBtn.title = t("srPlayPickTitle");
   document.getElementById("srRateLabel").textContent = t("srRate");
   srApplyRate();
   renderSrScore();
@@ -5812,6 +6116,19 @@ function srFixFor(code, ctx) {
     case "no-focus-style":
       return F(`/* replace outline:none with a visible focus ring */\n${tag === "a" ? "a" : tag === "button" ? "button" : "." + (SR_ATTRV(html, "class").split(" ")[0] || tag)}:focus-visible {\n  outline: 3px solid #1a73e8;\n  outline-offset: 2px;\n}`,
         "outline:none without a replacement hides focus from sighted keyboard users (WCAG 2.4.7). :focus-visible shows the ring only for keyboard, not mouse clicks.");
+    case "focus-ring-low-contrast": {
+      const sel = tag === "a" ? "a" : tag === "button" ? "button" : "." + (SR_ATTRV(html, "class").split(" ")[0] || tag);
+      return F(`/* ring colour must reach 3:1 against the surrounding background (${ctx.ringBg || "#fff"}) */\n${sel}:focus-visible {\n  outline: 3px solid ${ctx.ringBg && /^#(f|e)/i.test(ctx.ringBg) ? "#1a4480" : "#ffbf47"};\n  outline-offset: 2px;\n  box-shadow: none;\n}`,
+        `The ring is ${ctx.ringContrast ? ctx.ringContrast + ":1" : "below 3:1"} against the background — sighted keyboard users cannot find where they are (WCAG 2.4.11 Focus Appearance / 1.4.11). Dark blue on light surfaces, a light yellow ring on dark ones; a 2-colour ring (outline + white box-shadow) works on any background.`);
+    }
+    case "focus-ring-thin": {
+      const sel = tag === "a" ? "a" : tag === "button" ? "button" : "." + (SR_ATTRV(html, "class").split(" ")[0] || tag);
+      return F(`${sel}:focus-visible {\n  outline: 3px solid #1a4480;   /* was ${ctx.ringWidth || 1}px */\n  outline-offset: 2px;\n}`,
+        "A 1px ring disappears on high-DPI screens and next to borders. WCAG 2.4.11 asks for a ring at least 2px thick around the whole control (or the same area); 3px with a 2px offset is the safe default.");
+    }
+    case "focus-ring-clipped":
+      return F(`/* on the wrapper that clips (${ctx.info || "overflow:hidden container"}) */\n.wrapper {\n  overflow: visible;           /* or keep overflow and add room: */\n  padding: 6px;                /* ≥ outline-width + outline-offset */\n}\n\n/* or draw the ring inside the box so nothing needs to overflow */\n${tag === "a" ? "a" : tag === "button" ? "button" : "." + (SR_ATTRV(html, "class").split(" ")[0] || tag)}:focus-visible {\n  outline: 3px solid #1a4480;\n  outline-offset: -3px;\n}`,
+        "The ring is drawn outside the element and an ancestor with overflow hidden/auto/scroll cuts it off — the user sees a partial or missing indicator (calendars, carousels, scrollable tables, card grids). Either let the wrapper overflow, give it padding for the ring, or use a negative outline-offset / inset box-shadow so the ring stays inside the box.");
     case "invisible":
       return F(`// only focus things the user can see — hide AND remove from Tab together\nel.hidden = true;          // display:none ⇒ not focusable\n// or, if it must stay in the DOM:\nel.setAttribute("inert", "");`,
         "An invisible element received focus: the user's Tab press appears to do nothing. Hidden controls must be display:none, hidden, or inert.");
@@ -5832,6 +6149,25 @@ function srFixFor(code, ctx) {
     case "possible-trap":
       return F(`<!-- a container that handles keys must still let Tab, Shift+Tab and Escape leave it -->\n<div role="dialog" aria-modal="true" aria-labelledby="dlg-title">\n  …\n</div>\n<script>\ncontainer.addEventListener("keydown", (e) => {\n  if (e.key === "Escape") { close(); opener.focus(); }\n  // never preventDefault() on Tab unless you move focus yourself (and only inside a modal)\n});\n</script>`,
         "Focus stopped inside a container with its own keydown handler or a role=\"dialog\" without aria-modal. Script cannot send a real Tab key, so check by hand: press Tab and Shift+Tab at both ends and Escape — focus must leave (or, for a modal, cycle within the dialog and close on Escape). WCAG 2.1.2 No Keyboard Trap.");
+    case "widget-no-arrow-nav": {
+      const w = ctx.info || "tablist";
+      const item = { tablist: "tab", radiogroup: "radio", listbox: "option", menu: "menuitem", menubar: "menuitem", tree: "treeitem", grid: "gridcell" }[w] || "tab";
+      const st = item === "tab" || item === "option" ? "aria-selected" : item === "radio" ? "aria-checked" : "";
+      const gid = (SR_ATTRV(html, "role") === w && SR_ATTRV(html, "id")) || (ctx.container || "").replace(/^#(?=[\w-]+$)/, "") || `${w}-1`; // the row's markup is usually the focused item, not the group
+      return F(`<!-- roving tabindex: ONE Tab stop, arrow keys move between the items -->\n<div role="${w}" id="${gid}">\n  <button role="${item}"${st ? ` ${st}="true"` : ""} tabindex="0">Item 1</button>\n  <button role="${item}"${st ? ` ${st}="false"` : ""} tabindex="-1">Item 2</button>\n</div>\n<script>\nconst group = document.getElementById("${gid}");\ngroup.addEventListener("keydown", (e) => {\n  const items = [...group.querySelectorAll('[role="${item}"]')];\n  const i = items.indexOf(document.activeElement);\n  const next = { ArrowRight: i + 1, ArrowDown: i + 1, ArrowLeft: i - 1, ArrowUp: i - 1, Home: 0, End: items.length - 1 }[e.key];\n  if (next === undefined || i < 0) return;\n  e.preventDefault();\n  const to = items[(next + items.length) % items.length];\n  items.forEach((it) => { it.tabIndex = it === to ? 0 : -1;${st ? ` it.setAttribute("${st}", it === to ? "true" : "false");` : ""} });\n  to.focus();\n});\n</script>`,
+        `role="${w}" promises the screen reader user that arrow keys move between the ${item}s (WCAG 2.1.1 Keyboard; ARIA APG ${w} pattern) — the probe pressed ArrowRight and ArrowDown and nothing happened, so NVDA/VoiceOver users hear "${item} 1 of N" and cannot reach the others. Give the group one Tab stop (roving tabindex) and a keydown handler that moves focus and the ${st || "state"}. Synthetic keys cannot prove a failure: confirm with a real keyboard.`);
+    }
+    case "widget-no-enter-space": {
+      const isDiv = /^(div|span)$/.test(tag);
+      const label = ctx.name || vis || "LABEL";
+      return F(isDiv
+        ? `<!-- a real <button> gets Enter AND Space for free — no key handler needed -->\n<button type="button" class="${SR_ATTRV(html, "class") || "picker-trigger"}"${ctx.info === "combobox" || SR_ATTRV(html, "aria-haspopup") ? ` aria-haspopup="${SR_ATTRV(html, "aria-haspopup") || "listbox"}" aria-expanded="false"` : ""}>${label}</button>\n\n<!-- if the div must stay: handle the keys yourself -->\n${SR_ATTR(html, 'onkeydown="if (event.key === \'Enter\' || event.key === \' \') { event.preventDefault(); this.click(); }"')}`
+        : `<!-- Enter and Space (and ArrowDown for a picker) must do what the click does -->\n${SR_ATTR(html, 'onkeydown="if (event.key === \'Enter\' || event.key === \' \' || event.key === \'ArrowDown\') { event.preventDefault(); openPicker(this); }"')}\n<!-- and expose the state: aria-expanded="true" while the popup is open -->`,
+        `Verify manually — synthetic keys cannot trigger native activation. The probe pressed Enter and Space on this ${ctx.info || role} and saw no focus move, aria change, popup or DOM change within 150 ms. A native <button> activates on both keys by itself; a div/span with role="button", a combobox or an aria-haspopup trigger only responds if a keydown handler calls the same code as the click (WCAG 2.1.1). Use Enter and Space, not keyCode 13 only, and prevent the page from scrolling on Space.`);
+    }
+    case "widget-esc-no-close":
+      return F(`<!-- one Escape closes the popup and returns focus to the control that opened it -->\n${SR_ATTR(html, 'aria-expanded="true"')}\n<div role="listbox" id="picker-popup">…</div>\n<script>\nfunction openPicker(trigger) {\n  popup.hidden = false;\n  trigger.setAttribute("aria-expanded", "true");\n  const onKey = (e) => {\n    if (e.key !== "Escape") return;\n    e.stopPropagation();                 // the page's own Escape handler must not need a second press\n    popup.hidden = true;\n    trigger.setAttribute("aria-expanded", "false");\n    document.removeEventListener("keydown", onKey, true);\n    trigger.focus();\n  };\n  document.addEventListener("keydown", onKey, true);   // capture: works while focus is inside the popup\n}\n</script>`,
+        "Enter opened a popup but Escape did not close it (hint from synthetic keys — verify by hand). Keyboard users press Escape twice, or Tab out and leave the popup open on top of the page. Listen for Escape on document (capture) while the popup is open, close it, reset aria-expanded and move focus back to the trigger — WCAG 2.1.1 / ARIA APG combobox, menu and dialog patterns.");
     case "state-missing": {
       const attr = ctx.attr || "aria-pressed";
       const cls = SR_ATTRV(html, "class");
@@ -5863,6 +6199,28 @@ function srFixFor(code, ctx) {
     case "stepper-no-state":
       return F(`<ol class="${SR_ATTRV(html, "class") || "stepper"}">\n  <li class="done"><span class="visually-hidden">Step 1 of 4, completed: </span>Details<svg aria-hidden="true">…</svg></li>\n  <li class="active" aria-current="step"><span class="visually-hidden">Step 2 of 4, current: </span>Documents</li>\n  <li><span class="visually-hidden">Step 3 of 4: </span>Review</li>\n  <li><span class="visually-hidden">Step 4 of 4: </span>Submit</li>\n</ol>\n\n/* once, in your CSS */\n.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}`,
         'Tick icons and "active"/"done" classes are invisible to a screen reader: the stepper is read as a plain list of names. aria-current="step" on the current item ("current step") plus a hidden "Step 2 of 4, completed" prefix on each item tells the user where they are; mark the icons aria-hidden="true" so they are not read as "image".');
+    case "group-no-label": {
+      const kind = ctx.info === "radio" ? "radio" : "checkbox";
+      const label = ctx.hint || "GROUP_LABEL";
+      const id = SR_ATTRV(html, "id") || "group-label";
+      const item = (v, txt) => `  <label><input type="${kind}" name="${kind === "radio" ? "plan" : "options"}" value="${v}" /> ${txt}</label>`;
+      return F(`<!-- native: fieldset + legend name the group for every screen reader -->\n<fieldset>\n  <legend>${label}</legend>\n${item("1", "OPTION 1")}\n${item("2", "OPTION 2")}\n</fieldset>\n\n<!-- cannot change the markup: role="${kind === "radio" ? "radiogroup" : "group"}" + aria-labelledby on the existing container, pointing at the visible heading -->\n${SR_ATTR(SR_OPEN(html).replace(/\srole="[^"]*"/, ""), `role="${kind === "radio" ? "radiogroup" : "group"}" aria-labelledby="${id}-label"`)}\n  <p id="${id}-label">${label}</p>   <!-- the existing visible heading, given an id -->\n  …\n</${tag}>`,
+        `Each ${kind} is announced by its own text ("Dubai, checkbox, not checked") — the user never hears what the set of choices is about${ctx.hint ? ` ("${ctx.hint}" is sighted-only)` : ""}. <fieldset>/<legend> is the native answer (the legend is read when entering the group); role="${kind === "radio" ? "radiogroup" : "group"}" with aria-labelledby (or aria-label) on the wrapper does the same without changing the layout. Keep the visible heading — do not duplicate it in each option's label.`);
+    }
+    case "question-not-associated": {
+      const q = ctx.hint || vis || "QUESTION?";
+      const id = SR_ATTRV(html, "id") || "question";
+      const qEl = SR_ATTRV(html, "id") ? html : SR_ATTR(html, `id="${id}"`);
+      return F(`<!-- group the question with its answers: the screen reader says "${q}, group" before "Yes, button" -->\n<div role="group" aria-labelledby="${id}">\n  ${qEl}\n  <button type="button">Yes</button>\n  <button type="button">No</button>\n</div>\n\n<!-- or make each answer self-describing (also fixes the buttons list) -->\n<button type="button" aria-label="Yes — ${q}">Yes</button>\n<button type="button" aria-label="No — ${q}">No</button>`,
+        `"Yes" and "No" mean nothing without the question: in the buttons list, with voice control, or when the user tabs straight to them, nothing says what they are answering. A role="group" named by the question (aria-labelledby on the wrapper) is announced on entering the group; aria-label / aria-describedby on each button works when the layout cannot change. A <fieldset> with the question as its <legend> and two radio buttons is the fully native form.`);
+    }
+    case "label-not-associated": {
+      const label = (ctx.hint || ctx.info || "FIELD_LABEL").replace(/[:：*]+\s*$/, "").trim();
+      const id = SR_ID(html);
+      const field = SR_ATTRV(html, "id") ? html : SR_ATTR(html, `id="${id}"`);
+      return F(`<label for="${id}">${label}</label>\n${field}\n\n<!-- or wrap the field in the label (no id needed) -->\n<label>${label} ${field}</label>\n\n<!-- text that must stay a plain element: -->\n<span id="${id}-label" class="form-label">${label}</span>\n${SR_ATTR(html, `aria-labelledby="${id}-label"`)}`,
+        `The text "${label}" sits next to the field but nothing links them, so the screen reader announces ${ctx.name ? `"${ctx.name}"` : "an unnamed field"} and a voice-control user cannot say "click ${label}". <label for> (or wrapping the field) reuses the visible text as the accessible name and makes the label clickable too; aria-labelledby is the fallback when the text cannot become a <label>. Prefer this over aria-label — one text for everyone.`);
+    }
     case "link-new-window": {
       const label = vis || ctx.name || "LINK_TEXT";
       const stripped = SR_OPEN(html).replace(/\saria-label="[^"]*"/, "");
@@ -5926,6 +6284,18 @@ function srFixFor(code, ctx) {
     case "route-focus-stuck":
       return F(`// after rendering the new route, move focus to its heading (or to <main>)\nconst h1 = document.querySelector("main h1");\nh1.tabIndex = -1;            // focusable by script only, not in the Tab order\nh1.focus();\n// alternative: document.querySelector("main").tabIndex = -1; main.focus();`,
         "Focus stayed where it was (the link/button that triggered the navigation, or an element that is gone) while the content above changed — the next Tab press continues mid-page and the screen reader never reads the new heading. Move focus to the new page's H1 or its main landmark.");
+    case "nontext-contrast": {
+      const cf = A11yFixes.contrastFix(`foreground color: ${ctx.ntcColor || "#cccccc"}, background color: ${ctx.ntcBg || "#ffffff"}, expected contrast ratio of 3:1`, settings.dlsContrast ? A11yFixes.DLS_COLORS : undefined) || { to: "#767676", ratio: 4.54 };
+      const sel = SR_ATTRV(html, "id") ? "#" + SR_ATTRV(html, "id") : SR_ATTRV(html, "class") ? "." + SR_ATTRV(html, "class").split(" ")[0] : tag;
+      const tok = cf.token ? `   /* DLS ${cf.token} */` : "";
+      const kind = ctx.ntcKind || "border";
+      const css = kind === "icon"
+        ? (ctx.ntcProp === "color" ? `${sel} {\n  color: ${cf.to};${tok}\n}` : `${sel} svg {\n  ${ctx.ntcProp === "stroke" ? "stroke" : "fill"}: ${cf.to};${tok}\n}\n/* or set color: ${cf.to} on the button and use fill="currentColor" in the svg */`)
+        : kind === "background"
+          ? `${sel} {\n  background-color: ${cf.to};${tok}\n  /* or keep the fill and add a visible edge: */\n  border: 1px solid ${cf.to};\n}`
+          : `${sel} {\n  border: 1px solid ${cf.to};${tok}\n}`;
+      return F(css, `${kind === "icon" ? "The icon glyph" : kind === "background" ? "The control's fill (the only thing marking its edge)" : "The border"} is ${ctx.ntcRatio ? Number(ctx.ntcRatio).toFixed(2) + ":1" : "below 3:1"} against ${ctx.ntcBg || "the background"} — low-vision users cannot see where the control is or what state it is in (WCAG 1.4.11 Non-text Contrast). ${cf.to} reaches ${cf.ratio}:1${cf.token ? " and is the nearest UAE DLS token (" + cf.token + ")" : ""}; check hover, focus and checked states too.`);
+    }
     case "html-lang-missing":
       return F(ctx.detected === "ar" ? '<html lang="ar" dir="rtl">' : ctx.detected === "latin" ? '<html lang="en">' : '<html lang="LANGUAGE_CODE">',
         "The screen reader picks its voice/pronunciation rules from <html lang>. Without it Arabic pages are read with an English voice (or vice versa).");
@@ -6132,6 +6502,15 @@ function srPatchFor(code, ctx) {
       return { build: () => attr("aria-required", "true") };
     case "readonly-misuse":
       return { build: () => ({ removeAttr: ["readonly", "aria-readonly"] }), note: "Removes readonly only — make sure the picker script accepts typed input." };
+    case "group-no-label": {
+      const roleName = ctx.info === "radio" ? "radiogroup" : "group";
+      return { input: { label: t("srApplyGroupLabel"), value: (ctx.hint || "").trim() }, build: (v) => ({ setAttr: { role: roleName, "aria-label": v } }), note: "Quick fix only — the real fix is <fieldset> + <legend> (or aria-labelledby pointing at the visible heading)." };
+    }
+    case "question-not-associated":
+      if (ctx.info !== "tight") return null; // the parent holds more than the question and its buttons — nothing mechanical to apply
+      return { input: { label: t("srApplyGroupLabel"), value: (ctx.hint || "").trim() }, build: (v) => ({ parent: true, setAttr: { role: "group", "aria-label": v } }), note: "Applies role=\"group\" with the question as its name to the parent element." };
+    case "label-not-associated":
+      return { input: { label: t("srApplyFieldLabel"), value: (ctx.hint || ctx.info || "").replace(/[:：*]+\s*$/, "").trim() }, build: (v) => attr("aria-label", v), note: "Quick fix only — the real fix is <label for> so the visible text is the name." };
     case "link-new-window":
       return { build: () => ({ appendHidden: "(opens in a new tab)" }), note: "Adds hidden hint text inside the link — visible text is the better long-term fix." };
     case "link-download-hint":
@@ -6298,9 +6677,9 @@ function srAppendFixes(row, issues, ctx, column) {
   for (const i of issues) {
     if (!i.code || seen.has(i.code)) continue;
     seen.add(i.code);
-    const fix = srFixFor(i.code, { ...ctx, attr: i.attr, info: i.info });
+    const fix = srFixFor(i.code, { ...ctx, attr: i.attr, info: i.info, hint: i.hint });
     if (!fix) continue;
-    srMoreAdd(row, srFixBlock(fix, { ...ctx, code: i.code, attr: i.attr, info: i.info }, srIssueMsg(i)), column || "2");
+    srMoreAdd(row, srFixBlock(fix, { ...ctx, code: i.code, attr: i.attr, info: i.info, hint: i.hint }, srIssueMsg(i)), column || "2");
   }
 }
 
@@ -6316,6 +6695,7 @@ async function srRunAll() {
   try {
     try { await buildReadingOrder(); } catch (err) { console.error(err); }
     try { await runLangCheck(); } catch (err) { console.error(err); }
+    try { await runNtcCheck(); } catch (err) { console.error(err); }
     try { await focusWalk(); } catch (err) { console.error(err); }
     try { await startLive(false); } catch (err) { console.error(err); }
     lastRunAt = Date.now();

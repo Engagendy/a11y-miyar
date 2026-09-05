@@ -47,7 +47,7 @@
   <!-- ===== Screen reader tab fixtures ===== -->
   <h3>Screen reader fixtures</h3>
   <!-- generic link names, duplicated, different destinations -->
-  <div class="aegov-card"><p><a href="/a">Read more</a> · <a href="/b">Read more</a> · <a href="/c">click here</a></p></div>
+  <div class="aegov-card" role="group" aria-label="Offers card"><p><a href="/a">Read more</a> · <a href="/b">Read more</a> · <a href="/c">click here</a></p></div>
   <!-- aria-label that does not contain the visible text (WCAG 2.5.3) -->
   <button aria-label="Submit form">Send</button>
   <!-- focusable div with no role -->
@@ -68,6 +68,32 @@
   <button onclick="var d=document.createElement('div');d.setAttribute('aria-live','polite');d.textContent='Created with content — may be missed';document.body.appendChild(d)">Create live region with content</button>
   <!-- focus loss: removing the focused element -->
   <button onclick="this.remove()">Delete me (focus falls to body)</button>
+  <!-- focus ring: 1px #ccc outline on white (low contrast + thin), and a ring clipped by an overflow:hidden wrapper -->
+  <button id="ringFaint" style="outline: 1px solid #ccc; background:#fff; color:#000">Faint focus ring</button>
+  <div id="ringClipBox" style="overflow:hidden; display:inline-block; padding:0"><button id="ringClipped" style="outline: 3px solid #005ea5; outline-offset: 4px; margin:0">Clipped focus ring</button></div>
+  <!-- border-colour-only focus style (recognised as a ring, no issue) -->
+  <style>#ringBorder{border:2px solid #767676} #ringBorder:focus-visible{outline:none;border-color:#0b5fff}</style>
+  <button id="ringBorder">Border-only focus style</button>
+  <!-- Bootstrap-3-style focus: a persistent offset inset shadow plus a real 3px ring layer — the ring layer is the indicator (no issue);
+       a white ring over a gradient: contrast "unknown", not measured against white (no low-contrast issue) -->
+  <style>#ringShadow:focus-visible{outline:none;box-shadow:inset 0 1px 1px rgba(0,0,0,.075), 0 0 0 3px #1a4480}</style>
+  <button id="ringShadow">Shadow ring</button>
+  <div style="background-image:linear-gradient(#333,#000); padding:6px; display:inline-block"><button id="ringOnImage" style="outline:2px solid #fff; background:#444; color:#fff">Ring over image</button>
+    <input type="text" id="ntcOnImage" aria-label="On gradient" style="border:1px solid #fff; background:transparent; color:#fff" /></div>
+  <!-- non-text contrast (WCAG 1.4.11): input border #ddd on white, icon-only button with a #bbb glyph, custom toggle #ccc — all under 3:1 -->
+  <div class="field"><label for="ntcInput">Reference number</label> <input type="text" id="ntcInput" style="border:1px solid #ddd; background:#fff" /></div>
+  <button id="ntcIcon" type="button" aria-label="Search" style="border:0; background:none; padding:4px"><svg width="16" height="16" viewBox="0 0 16 16" fill="#bbb" aria-hidden="true"><circle cx="7" cy="7" r="5"/><path d="M11 11l4 4"/></svg></button>
+  <button id="ntcToggle" type="button" role="switch" aria-checked="false" aria-label="Notifications" class="toggle" style="width:40px; height:20px; border:0; border-radius:10px; background:#ccc"></button>
+  <!-- must stay clean: a #767676 border (4.5:1), an icon button with a dark glyph, a disabled faint field, a child inside a failed control -->
+  <input type="text" id="ntcOk" aria-label="Postcode" style="border:1px solid #767676; background:#fff" />
+  <button id="ntcIconOk" type="button" aria-label="Close" style="border:0; background:none"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="#333" stroke-width="2"/></svg></button>
+  <input type="text" id="ntcDisabled" aria-label="Disabled" disabled style="border:1px solid #ddd" />
+  <!-- must stay clean too: a Bootstrap hamburger (faint decorative border, dark glyph), a Material "filled" field (border-bottom only),
+       a light <input type=submit> (text is the indicator), an svg logo whose first shape is a white background rect -->
+  <button id="ntcHamburger" type="button" aria-label="Menu" class="navbar-toggler" style="border:1px solid rgba(0,0,0,.1); background:#fff; padding:4px"><span class="navbar-toggler-icon"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12" stroke="#333" stroke-width="2"/></svg></span></button>
+  <input type="text" id="ntcFilled" aria-label="Filled field" style="border:0; border-bottom:2px solid #333; background:#f5f5f5" />
+  <input type="submit" id="ntcSubmitLight" value="Cancel" style="background:#f0f0f0; border:1px solid #ddd; color:#333" />
+  <a id="ntcLogo" href="/" aria-label="Home"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" fill="#fff"/><path d="M4 12l8-8 8 8v8H4z" fill="#003a70"/></svg></a>
   <!-- modal that does not trap focus -->
   <button onclick="document.getElementById('dlg').showModal()">Open modal</button>
   <dialog id="dlg"><p>Modal without proper trap</p><button onclick="document.getElementById('dlg').close()">Close</button></dialog>
@@ -115,6 +141,49 @@
   <div id="searchRes" hidden>3 results</div>
   <script>function pickTab(b) { for (var t of b.parentNode.children) t.classList.toggle("active", t === b); }</script>
 
+  <!-- ===== Custom widget keyboard probe (auto-walk): click-only tablist (arrows do nothing) vs a proper roving-tabindex one;
+       a div role=button that opens a listbox on Enter/Space and closes it on Escape must stay clean ===== -->
+  <h3>Custom widget keyboard fixtures</h3>
+  <div role="tablist" id="kbdBadTabs" aria-label="Click-only tabs">
+    <button type="button" role="tab" id="kbdBadTab1" aria-selected="true" onclick="kbdPick(this)">Individuals</button>
+    <button type="button" role="tab" id="kbdBadTab2" aria-selected="false" onclick="kbdPick(this)">Establishments</button>
+  </div>
+  <div role="tablist" id="kbdGoodTabs" aria-label="Arrow-key tabs" onkeydown="kbdArrows(event)">
+    <button type="button" role="tab" id="kbdGoodTab1" aria-selected="true" tabindex="0" onclick="kbdPick(this)">Individuals</button>
+    <button type="button" role="tab" id="kbdGoodTab2" aria-selected="false" tabindex="-1" onclick="kbdPick(this)">Establishments</button>
+  </div>
+  <div id="kbdGoodBtn" role="button" tabindex="0" aria-haspopup="listbox" aria-expanded="false" onclick="kbdToggle(this)"
+       onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); kbdToggle(this); } else if (event.key === 'Escape') { kbdToggle(this, false); }">Choose emirate</div>
+  <!-- must stay clean: a native <button> popup trigger (Enter/Space → click is the browser's job), a "Delete" div (never fired for real),
+       a non-wrapping tablist whose Tab stop is the LAST tab (only ArrowLeft moves), a trigger whose popup handles Escape itself -->
+  <button id="kbdNativePopup" type="button" aria-haspopup="dialog" onclick="document.getElementById('kbdNativeDlg').hidden = !document.getElementById('kbdNativeDlg').hidden">Open filters</button>
+  <div id="kbdNativeDlg" role="dialog" aria-label="Filters" hidden><p>Filters</p></div>
+  <div id="kbdRisky" role="button" tabindex="0" onclick="this.dataset.fired = '1'" onkeydown="if (event.key === 'Enter') this.dataset.fired = '1'">Delete account</div>
+  <div role="tablist" id="kbdLastTabs" aria-label="Last-tab tabs" onkeydown="kbdArrowsNoWrap(event)">
+    <button type="button" role="tab" id="kbdLastTab1" aria-selected="false" tabindex="-1" onclick="kbdPick(this)">Overview</button>
+    <button type="button" role="tab" id="kbdLastTab2" aria-selected="true" tabindex="0" onclick="kbdPick(this)">History</button>
+  </div>
+  <div id="kbdEscOnPopup" role="button" tabindex="0" aria-haspopup="listbox" aria-expanded="false"
+       onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); kbdToggle(this, true, 'kbdEscPopup'); document.querySelector('#kbdEscPopup [role=option]').focus(); }">Choose sector</div>
+  <div id="kbdEscPopup" role="listbox" aria-label="Sector" hidden onkeydown="if (event.key === 'Escape') { kbdToggle(document.getElementById('kbdEscOnPopup'), false, 'kbdEscPopup'); document.getElementById('kbdEscOnPopup').focus(); }"><div role="option" aria-selected="true" tabindex="-1">Public</div><div role="option" aria-selected="false" tabindex="-1">Private</div></div>
+  <div id="kbdPopup" role="listbox" aria-label="Emirate" hidden><div role="option" aria-selected="true" tabindex="-1">Dubai</div><div role="option" aria-selected="false" tabindex="-1">Abu Dhabi</div></div>
+  <script>
+    function kbdPick(b) { for (var t of b.parentNode.children) { t.setAttribute("aria-selected", t === b ? "true" : "false"); if (t.parentNode.id === "kbdGoodTabs" || t.parentNode.id === "kbdLastTabs") t.tabIndex = t === b ? 0 : -1; } }
+    function kbdArrowsNoWrap(e) {
+      var items = [...e.currentTarget.querySelectorAll("[role=tab]")], i = items.indexOf(document.activeElement);
+      var next = { ArrowRight: i + 1, ArrowLeft: i - 1 }[e.key];
+      if (next === undefined || i < 0 || next < 0 || next >= items.length) return;
+      e.preventDefault(); kbdPick(items[next]); items[next].focus();
+    }
+    function kbdArrows(e) {
+      var items = [...e.currentTarget.querySelectorAll("[role=tab]")], i = items.indexOf(document.activeElement);
+      var next = { ArrowRight: i + 1, ArrowDown: i + 1, ArrowLeft: i - 1, ArrowUp: i - 1, Home: 0, End: items.length - 1 }[e.key];
+      if (next === undefined || i < 0) return;
+      e.preventDefault(); var to = items[(next + items.length) % items.length]; kbdPick(to); to.focus();
+    }
+    function kbdToggle(b, force, popupId) { var open = force === undefined ? b.getAttribute("aria-expanded") !== "true" : force; b.setAttribute("aria-expanded", open ? "true" : "false"); document.getElementById(popupId || "kbdPopup").hidden = !open; }
+  </script>
+
   <!-- ===== Link behaviour (board gaps): new tab / download / external without a hint, href="#" links acting as buttons ===== -->
   <h3>Link behaviour fixtures</h3>
   <p>
@@ -143,6 +212,42 @@
     <a id="pageNext" class="page-next" href="javascript:void(0)">Next</a>
   </nav>
   <a id="toggleLink" class="toggle-link" href="#" onclick="document.getElementById('expBody').hidden=false;return false">Show filters (link as button)</a>
+
+  <!-- ===== Form group labelling (board gaps): checkbox/radio groups with no group name, a question not associated with its Yes/No buttons, visible labels not linked ===== -->
+  <h3>Form group labelling fixtures</h3>
+  <!-- checkbox filter group: a visible "Emirate" heading, no fieldset/legend, no role=group -->
+  <div id="filterGroup" class="filters"><p class="filter-title">Emirate</p>
+    <label><input type="checkbox" name="emirate" value="dxb" /> Dubai</label>
+    <label><input type="checkbox" name="emirate" value="auh" /> Abu Dhabi</label>
+    <label><input type="checkbox" name="emirate" value="shj" /> Sharjah</label>
+  </div>
+  <!-- radio pair sharing a name, each in its own wrapper, no radiogroup -->
+  <div id="planRadios"><span class="form-label">Billing plan:</span><div><input type="radio" id="planA" name="plan" /><label for="planA">Monthly</label></div><div><input type="radio" id="planB" name="plan" /><label for="planB">Yearly</label></div></div>
+  <!-- question followed by Yes / No buttons that nothing ties to it -->
+  <div id="usefulBox"><p id="usefulQ">Did you find this content useful?</p><button type="button" id="usefulYes">Yes</button> <button type="button" id="usefulNo">No</button></div>
+  <!-- label-like text next to a field that it does not name: <label> without for beside a field with a different aria-label, a .form-label span ending in ":" beside a placeholder-only field -->
+  <div class="field" id="tradeField"><label id="tradeLbl">Trade licence number</label> <input type="text" id="tradeNo" aria-label="Licence" /></div>
+  <div class="field"><span class="form-label">Company name:</span> <input type="text" id="coName" placeholder="Company" /></div>
+  <!-- must stay clean: fieldset+legend, a named radiogroup, a question inside role=group aria-labelledby, a real <label for>, a single wrapped checkbox -->
+  <fieldset id="okGroup"><legend>Notification channel</legend><label><input type="checkbox" name="chan" value="sms" /> SMS</label><label><input type="checkbox" name="chan" value="email" /> Email</label></fieldset>
+  <div id="okRadios" role="radiogroup" aria-label="Language"><label><input type="radio" name="lng" value="en" /> English</label><label><input type="radio" name="lng" value="ar" /> Arabic</label></div>
+  <div id="okQuestion" role="group" aria-labelledby="okQ"><p id="okQ">هل كانت هذه الصفحة مفيدة؟</p><button type="button">نعم</button> <button type="button">لا</button></div>
+  <div class="field"><label for="okLabelled">Mobile number</label> <input type="text" id="okLabelled" /></div>
+  <div class="field"><label><input type="checkbox" id="agree" /> I agree to the terms</label></div>
+  <!-- must stay clean: a legend + an "Other" text field, a fieldset named by aria-label, one name= shared by two labelled fieldsets,
+       two unrelated unnamed checkboxes side by side, a confirmation dialog named by its question, a question followed by a hidden
+       modal template with OK/Cancel, a lone field in a section whose intro ends in ":", a label the aria-label starts -->
+  <fieldset id="fsOther"><legend>How did you hear about us?</legend><label><input type="radio" name="src" value="web" /> Web</label><label><input type="radio" name="src" value="friend" /> Friend</label><label>Other <input type="text" name="srcOther" /></label></fieldset>
+  <fieldset id="fsAria" aria-label="Contact preferences"><label><input type="checkbox" name="cp" value="sms" /> SMS</label><label><input type="checkbox" name="cp" value="call" /> Call</label></fieldset>
+  <form id="sharedNameForm" onsubmit="return false"><fieldset><legend>Emirate</legend><label><input type="checkbox" name="f[]" value="dxb" /> Dubai</label><label><input type="checkbox" name="f[]" value="auh" /> Abu Dhabi</label></fieldset>
+    <fieldset><legend>Sector</legend><label><input type="checkbox" name="f[]" value="pub" /> Public</label><label><input type="checkbox" name="f[]" value="priv" /> Private</label></fieldset></form>
+  <div><div id="pairBox"><label><input type="checkbox" /> Remember me</label> <label><input type="checkbox" /> Subscribe</label></div></div>
+  <div id="qDlg" role="alertdialog" aria-labelledby="qDlgQ"><h4 id="qDlgQ">Delete this record?</h4><div><button type="button">Cancel</button> <button type="button">OK</button></div></div>
+  <div id="hiddenQBox"><h4 id="hiddenQ">Have a question?</h4><div class="content"><p>Read the FAQ first.</p><div hidden><button type="button">OK</button><button type="button">Cancel</button></div></div></div>
+  <section id="otpSection"><p>Enter the OTP sent to your phone:</p><form onsubmit="return false"><div><input type="text" id="otpCode" aria-label="One-time code" /></div><button type="button">Verify</button></form></section>
+  <div class="field"><label>Email address</label> <input type="email" id="emailAddr" aria-label="Email" /></div>
+  <!-- custom role=checkbox group with a visible heading and no group name: flagged -->
+  <div id="roleGrp" class="interests"><p>Interests</p><div role="checkbox" aria-checked="false" tabindex="0">Sports</div><div role="checkbox" aria-checked="false" tabindex="0">Music</div></div>
 
   <!-- fake SPA (hash router): "Services" re-renders silently — same title, same H1, focus stays on the
        button; "Contact" sets document.title, renders a page-specific H1, focuses it and announces the change -->

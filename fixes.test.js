@@ -108,12 +108,21 @@ assert(issuesMarkdown({ url: "x", violations: [] }, null).indexOf("# Accessibili
 assert(srVerifyStep("no-name", { name: "Search", role: "button" }) === "Tab to the control; expected announcement: 'Search', button.", "verify no-name");
 assert(/Trigger the update with a screen reader running; expect 'Saved' announced/.test(srVerifyStep("silent", { text: "Saved" })), "verify silent");
 assert(/Read the sentence with VoiceOver\/NVDA; the voice must switch for 'Dubai'/.test(srVerifyStep("text-mismatch", { snippet: "Dubai" })), "verify text-mismatch");
+assert(/Tab into the tablist and press the arrow keys/.test(srVerifyStep("widget-no-arrow-nav", { info: "tablist" })), "verify widget-no-arrow-nav");
+assert(/press Enter, then Space/.test(srVerifyStep("widget-no-enter-space", {})) && /press Escape once/.test(srVerifyStep("widget-esc-no-close", {})), "verify widget enter/escape");
+assert(/onKeyDown=\{onKeyDown\}[\s\S]*aria-selected=\{i === active\}[\s\S]*tabIndex=\{i === active \? 0 : -1\}/.test(frameworkizeSnippet("<div role=\"tablist\">", "react", "widget-no-arrow-nav", { info: "tablist" })), "react roving tabindex snippet");
+assert(/@keydown="onKeyDown"[\s\S]*:aria-checked="i === active"/.test(frameworkizeSnippet("<div role=\"radiogroup\">", "vue", "widget-no-arrow-nav", { info: "radiogroup" })), "vue roving tabindex snippet");
+assert(/@keydown\.enter\.prevent="open"/.test(frameworkizeSnippet("x", "vue", "widget-no-enter-space", { name: "Pick" })) && /openerRef\.current\?\.focus\(\)/.test(frameworkizeSnippet("x", "react", "widget-esc-no-close", {})), "widget activate/escape framework snippets");
 assert(/expect 'selected' announced on the control itself/.test(srVerifyStep("state-missing", { attr: "aria-selected" })), "verify state-missing");
 assert(/'expanded' \/ 'collapsed'/.test(srVerifyStep("state-not-announced", { attr: "aria-expanded" })), "verify state-not-announced");
 assert(/pressed \/ selected \/ expanded/.test(srVerifyStep("state-not-announced", {})), "verify state fallback");
 assert(/end with 'required'/.test(srVerifyStep("required-not-exposed", {})), "verify required-not-exposed");
 assert(/not be announced as 'read only'/.test(srVerifyStep("readonly-misuse", {})), "verify readonly-misuse");
 assert(/current step/.test(srVerifyStep("stepper-no-state", {})), "verify stepper-no-state");
+assert(/group name/.test(srVerifyStep("group-no-label", {})), "verify group-no-label");
+assert(/question must be announced/.test(srVerifyStep("question-not-associated", {})), "verify question-not-associated");
+assert(/'Company name'/.test(srVerifyStep("label-not-associated", { info: "Company name:" })), "verify label-not-associated uses the visible text");
+assert(/htmlFor="tradeNo"/.test(frameworkizeSnippet('<label for="tradeNo">Trade licence number</label>\n<input type="text" id="tradeNo" />', "react", "label-not-associated", {})), "label fix in React uses htmlFor");
 assert(/opens in a new tab/.test(srVerifyStep("link-new-window", {})), "verify link-new-window");
 assert(/\('PDF'\) and size/.test(srVerifyStep("link-download-hint", { info: "PDF" })), "verify link-download-hint");
 assert(/'external'/.test(srVerifyStep("link-external-hint", {})), "verify link-external-hint");
@@ -210,3 +219,10 @@ if (failed) {
   process.exit(1);
 }
 console.log("All tests passed");
+
+// non-text contrast (WCAG 1.4.11): contrastFix at 3:1, verify step, findings section
+const ntcFix = contrastFix("foreground color: #dddddd, background color: #ffffff, expected contrast ratio of 3:1");
+assert(ntcFix && ntcFix.required === 3 && ntcFix.ratio >= 3 && ntcFix.to !== "#dddddd", "contrastFix 3:1 non-text target");
+assert(/3:1/.test(srVerifyStep("nontext-contrast", { info: "border #dddddd" })) && /border #dddddd/.test(srVerifyStep("nontext-contrast", { info: "border #dddddd" })), "nontext-contrast verify step");
+const ntcF = srFindings({ nonTextContrast: { checked: 3, issues: [{ code: "nontext-contrast", level: "serious", kind: "icon", color: "#bbbbbb", bg: "#ffffff", ratio: 1.92, sel: "#ntcIcon", role: "button", name: "Search", msg: "Non-text contrast 1.92:1 — icon #bbbbbb on #ffffff" }] } });
+assert(ntcF.length === 1 && ntcF[0].section === "ntc" && ntcF[0].sectionLabel === "Non-text contrast" && ntcF[0].level === "serious" && /icon #bbbbbb/.test(ntcF[0].verify), "srFindings nonTextContrast section");

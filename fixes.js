@@ -566,6 +566,12 @@ function srVerifyStep(code, ctx) {
       return "Open the dialog; focus and the announcement must move to its title or first control.";
     case "no-focus-style":
       return "Tab to the control; a visible focus ring must appear.";
+    case "focus-ring-low-contrast":
+      return "Tab to the control; the focus ring must be clearly visible against the surrounding background (at least 3:1 — check with the contrast picker).";
+    case "focus-ring-thin":
+      return "Tab to the control; the focus ring must be at least 2px thick and visible on a high-DPI screen at arm's length.";
+    case "focus-ring-clipped":
+      return "Tab to the control; the whole focus ring must be visible on all four sides, not cut off by its container.";
     case "invisible":
     case "offscreen":
     case "skip-offscreen":
@@ -574,6 +580,12 @@ function srVerifyStep(code, ctx) {
       return "Tab through the page; the control must be reachable (or be removed from the Tab sequence if it is meant to be hidden).";
     case "possible-trap":
       return "Tab and Shift+Tab at both ends of the container and press Escape; focus must be able to leave it.";
+    case "widget-no-arrow-nav":
+      return "Tab into the " + (ctx.info || "widget") + " and press the arrow keys; focus (or the selection) must move between the items and the screen reader must announce each one.";
+    case "widget-no-enter-space":
+      return "Tab to the control and press Enter, then Space; it must activate (open the picker / menu) exactly as a mouse click does.";
+    case "widget-esc-no-close":
+      return "Open the popup from the keyboard and press Escape once; it must close and return focus to the control that opened it.";
     case "state-missing":
     case "state-not-announced": {
       var st = { "aria-expanded": "'expanded' / 'collapsed'", "aria-selected": "'selected'", "aria-checked": "'checked' / 'not checked'", "aria-current": "'current'", "aria-pressed": "'pressed' / 'not pressed'" }[ctx.attr] || "the new state (pressed / selected / expanded / checked)";
@@ -585,6 +597,12 @@ function srVerifyStep(code, ctx) {
       return "Tab to the field; it must not be announced as 'read only', and typing a value (plus the picker button) must work.";
     case "stepper-no-state":
       return "Arrow through the stepper; expect 'Step 2 of N, current step' on the active step and 'completed' on finished ones.";
+    case "group-no-label":
+      return "Tab into the first option; the screen reader must announce the group name (legend / aria-label) before 'checkbox' or 'radio button'.";
+    case "question-not-associated":
+      return "Open the buttons list and Tab to 'Yes'/'No'; the question must be announced with the button (group name or its label/description).";
+    case "label-not-associated":
+      return "Tab to the field; the announcement must be the visible label text" + (ctx.info ? " ('" + String(ctx.info).replace(/[:*]+\s*$/, "") + "')" : "") + ", and clicking the label must focus the field.";
     case "link-new-window":
       return "Tab to the link; the announcement must include 'opens in a new tab' (or 'new window') before Enter is pressed.";
     case "link-download-hint":
@@ -623,6 +641,8 @@ function srVerifyStep(code, ctx) {
     case "text-mismatch":
     case "lang-invalid":
       return "Read the sentence with VoiceOver/NVDA; the voice must switch for " + snip + ".";
+    case "nontext-contrast":
+      return "Check the " + (ctx.info || "control's border, background or icon") + " with a contrast picker against the surrounding background; it must reach 3:1 (also in every state: hover, checked, focused).";
     case "cmp-missing":
       return "Open both language versions; the " + role + " must exist and be reachable on each.";
     case "cmp-live":
@@ -643,7 +663,7 @@ function srVerifyStep(code, ctx) {
   }
 }
 
-var SR_SECTION_LABEL = { order: "Reading order", live: "Live regions", focus: "Focus trace", lang: "Language", journey: "Journey", cmp: "Bilingual comparison", ax: "Browser accessibility tree" };
+var SR_SECTION_LABEL = { order: "Reading order", live: "Live regions", focus: "Focus trace", lang: "Language", ntc: "Non-text contrast", journey: "Journey", cmp: "Bilingual comparison", ax: "Browser accessibility tree" };
 
 function srLevelOf(item) {
   if (item.level) return item.level;
@@ -685,7 +705,7 @@ function srFindings(sr) {
       instances: item.instances || 1, selectors: item.selectors || (item.sel ? [item.sel] : []), fix: item.fix || null,
     };
     f.title = srTitle(section, item, msg);
-    f.verify = srVerifyStep(f.code, { name: item.name, role: item.role, text: item.text, sel: item.sel, snippet: item.snippet, declared: item.declared, detected: item.detected, attr: item.attr, info: item.info });
+    f.verify = srVerifyStep(f.code, { name: item.name, role: item.role, text: item.text, sel: item.sel, snippet: item.snippet, declared: item.declared, detected: item.detected, attr: item.attr, info: item.info || (item.kind ? item.kind + " " + (item.color || "") : undefined) });
     seen[f.code + "|" + f.sel] = true;
     out.push(f);
   };
@@ -711,6 +731,7 @@ function srFindings(sr) {
   }
   if (sr.focusTrace) nodeList("focus", sr.focusTrace.issues);
   if (sr.language) (sr.language.issues || []).forEach(function (i) { add("lang", i.type, i, i.msg || i.type); });
+  if (sr.nonTextContrast) (sr.nonTextContrast.issues || []).forEach(function (i) { add("ntc", i.code || "nontext-contrast", i, i.msg || "non-text contrast below 3:1"); });
   if (sr.bilingual) (sr.bilingual.differences || []).forEach(function (d) { add("cmp", d.code, d, d.msg || d.kind); });
   if (sr.journey) {
     (sr.journey.gaps || []).forEach(function (g) {
@@ -789,6 +810,48 @@ function srLinkNewWindow(fw, opts) {
   return "<!-- NewTabLink.vue -->\n<template>\n  <a :href=\"href\" target=\"_blank\" rel=\"noopener noreferrer\">\n    <slot />\n    <span class=\"visually-hidden\"> (opens in a new tab)</span>\n  </a>\n</template>\n<script setup>defineProps({ href: String });</script>\n\n<NewTabLink href=\"/feedback\">" + label + "</NewTabLink>";
 }
 
+// custom widget keyboard probe: roving tabindex + arrow keys, Enter/Space activation, Escape closes the popup
+function srWidgetArrows(fw, opts) {
+  opts = opts || {};
+  var role = opts.info || "tablist";
+  var item = { tablist: "tab", radiogroup: "radio", listbox: "option", menu: "menuitem", menubar: "menuitem", tree: "treeitem", grid: "gridcell" }[role] || "tab";
+  var state = item === "tab" || item === "option" ? "aria-selected" : item === "radio" ? "aria-checked" : null;
+  if (fw === "react") {
+    return "// roving tabindex: one Tab stop, arrows move between the items\n" +
+      "const [active, setActive] = useState(0);\nconst refs = useRef([]);\n" +
+      "function onKeyDown(e) {\n  const n = items.length;\n  const next = { ArrowRight: active + 1, ArrowDown: active + 1, ArrowLeft: active - 1, ArrowUp: active - 1, Home: 0, End: n - 1 }[e.key];\n" +
+      "  if (next === undefined) return;\n  e.preventDefault();\n  const i = (next + n) % n;\n  setActive(i);\n  refs.current[i]?.focus();\n}\n\n" +
+      "<div role=\"" + role + "\" onKeyDown={onKeyDown}>\n  {items.map((it, i) => (\n    <button key={it.id} ref={(el) => (refs.current[i] = el)} role=\"" + item + "\"" +
+      (state ? " " + state + "={i === active}" : "") + " tabIndex={i === active ? 0 : -1} onClick={() => setActive(i)}>{it.label}</button>\n  ))}\n</div>";
+  }
+  return "<!-- roving tabindex: one Tab stop, arrows move between the items -->\n" +
+    "<div role=\"" + role + "\" @keydown=\"onKeyDown\">\n  <button v-for=\"(it, i) in items\" :key=\"it.id\" ref=\"items\" role=\"" + item + "\"" +
+    (state ? " :" + state + "=\"i === active\"" : "") + " :tabindex=\"i === active ? 0 : -1\" @click=\"active = i\">{{ it.label }}</button>\n</div>\n\n" +
+    "onKeyDown(e) {\n  const n = this.items.length;\n  const next = { ArrowRight: this.active + 1, ArrowDown: this.active + 1, ArrowLeft: this.active - 1, ArrowUp: this.active - 1, Home: 0, End: n - 1 }[e.key];\n" +
+    "  if (next === undefined) return;\n  e.preventDefault();\n  this.active = (next + n) % n;\n  this.$refs.items[this.active].focus();\n}";
+}
+function srWidgetActivate(fw, opts) {
+  opts = opts || {};
+  var label = opts.name || "LABEL";
+  if (fw === "react") {
+    return "{/* a real <button> gets Enter and Space for free — no key handler needed */}\n<button type=\"button\" onClick={open}>" + label + "</button>\n\n" +
+      "{/* if the div must stay: handle the keys yourself */}\n<div role=\"button\" tabIndex={0} onClick={open}\n  onKeyDown={(e) => { if (e.key === \"Enter\" || e.key === \" \") { e.preventDefault(); open(); } }}>" + label + "</div>";
+  }
+  return "<!-- a real <button> gets Enter and Space for free — no key handler needed -->\n<button type=\"button\" @click=\"open\">" + label + "</button>\n\n" +
+    "<!-- if the div must stay: handle the keys yourself -->\n<div role=\"button\" tabindex=\"0\" @click=\"open\" @keydown.enter.prevent=\"open\" @keydown.space.prevent=\"open\">" + label + "</div>";
+}
+function srWidgetEscape(fw, opts) {
+  opts = opts || {};
+  if (fw === "react") {
+    return "// one Escape closes the popup and returns focus to the opener\nconst openerRef = useRef(null);\n" +
+      "useEffect(() => {\n  if (!open) return;\n  const onKey = (e) => { if (e.key === \"Escape\") { e.stopPropagation(); setOpen(false); } };\n  document.addEventListener(\"keydown\", onKey);\n  return () => { document.removeEventListener(\"keydown\", onKey); openerRef.current?.focus(); };\n}, [open]);\n\n" +
+      "<button ref={openerRef} aria-haspopup=\"listbox\" aria-expanded={open} onClick={() => setOpen(!open)}>…</button>";
+  }
+  return "<!-- one Escape closes the popup and returns focus to the opener -->\n<button ref=\"opener\" aria-haspopup=\"listbox\" :aria-expanded=\"open\" @click=\"open = !open\">…</button>\n" +
+    "<div v-if=\"open\" role=\"listbox\" @keydown.esc.stop=\"close\">…</div>\n\n" +
+    "close() {\n  this.open = false;\n  this.$nextTick(() => this.$refs.opener.focus());\n}";
+}
+
 var SR_FRAMEWORK_SNIPPETS = {
   react: {
     "focus-lost": function () {
@@ -821,6 +884,9 @@ var SR_FRAMEWORK_SNIPPETS = {
     "route-h1-dup": function () { return "// React Router: one page-specific <h1> per route (the site name belongs in the title suffix)\nfunction ContactPage() {\n  return (\n    <main>\n      <h1 tabIndex={-1}>Contact</h1>          {/* not \"SITE_NAME\" on every page */}\n      …\n    </main>\n  );\n}\n\n// and keep document.title in step: useEffect(() => { document.title = \"Contact — SITE_NAME\"; }, []);"; },
     "route-focus-stuck": function () { return srReactRoute(false, true); },
     "link-as-button": function (opts) { return srLinkAsButton("react", opts); },
+    "widget-no-arrow-nav": function (opts) { return srWidgetArrows("react", opts); },
+    "widget-no-enter-space": function (opts) { return srWidgetActivate("react", opts); },
+    "widget-esc-no-close": function (opts) { return srWidgetEscape("react", opts); },
     "link-new-window": function (opts) { return srLinkNewWindow("react", opts); },
     "rerender": function () {
       return "// after a route change or list refresh: announce a summary + move focus to the new heading\n" +
@@ -852,6 +918,9 @@ var SR_FRAMEWORK_SNIPPETS = {
     "silent": function (opts) { return srVueStatus(opts); },
     "risky": function (opts) { return srVueStatus(opts); },
     "live-late": function (opts) { return srVueStatus(opts); },
+    "widget-no-arrow-nav": function (opts) { return srWidgetArrows("vue", opts); },
+    "widget-no-enter-space": function (opts) { return srWidgetActivate("vue", opts); },
+    "widget-esc-no-close": function (opts) { return srWidgetEscape("vue", opts); },
     "route-silent": function () { return srVueRoute(true, true); },
     "route-title-stale": function () { return srVueRoute(true, false); },
     "route-h1-dup": function () { return "<!-- Vue Router: one page-specific <h1> per route view (the site name belongs in the title suffix) -->\n<template>\n  <main>\n    <h1 tabindex=\"-1\">Contact</h1>   <!-- not \"SITE_NAME\" on every page -->\n    …\n  </main>\n</template>\n\n<!-- and keep the title in step: routes: [{ path: '/contact', component: Contact, meta: { title: 'Contact' } }] -->"; },

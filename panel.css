@@ -1109,6 +1109,7 @@ details.sr-more > .sr-sel { margin-top: 2px; }
 .sr-name.empty { opacity: 0.5; font-style: italic; }
 .sr-states { opacity: 0.65; font-size: 11px; }
 .sr-states span { margin-inline-end: 6px; }
+.sr-states .sr-ring { font-variant-numeric: tabular-nums; border: 1px solid currentColor; border-radius: 999px; padding: 0 6px; opacity: 0.9; }
 .sr-issue { grid-column: 2; font-size: 11px; }
 .sr-sel { grid-column: 2; }
 .sr-row .badge-dup { cursor: pointer; margin-inline-start: 6px; vertical-align: 1px; }
@@ -1175,6 +1176,10 @@ details.sr-more > .sr-sel { margin-top: 2px; }
   animation: pulse 1.2s ease-in-out infinite;
 }
 .sr-lang-snippet { font-style: italic; opacity: 0.85; }
+.sr-ntc-colors { direction: ltr; unicode-bidi: isolate; display: inline-flex; align-items: center; gap: 3px; flex-wrap: wrap; }
+.sr-ntc-kind { font-size: 11px; opacity: 0.7; }
+.sr-ntc-colors code { font-size: 11px; }
+.sr-ntc-ratio { color: var(--serious); }
 .sr-fix { margin: 4px 0 6px; }
 .sr-fix code.sr-current { opacity: 0.75; }
 /* inline token diff between "Now" and "Change to" */
@@ -1198,8 +1203,15 @@ details.sr-more > .sr-sel { margin-top: 2px; }
   font-size: 11px; line-height: 16px; padding: 0 4px; margin-inline-start: 4px;
   border: 1px solid transparent; border-radius: 4px; background: transparent; cursor: pointer; opacity: 0.6; vertical-align: 1px;
 }
-.sr-speak:hover, .sr-speak:focus-visible { opacity: 1; border-color: var(--accent); }
+.sr-rowbtn {
+  font-size: 11px; line-height: 16px; padding: 0 3px; margin-inline-start: 2px;
+  border: 1px solid transparent; border-radius: 4px; background: transparent; cursor: pointer; opacity: 0.6; vertical-align: 1px;
+}
+.sr-speak .ic, .sr-rowbtn .ic { width: 12px; height: 12px; vertical-align: -2px; }
+.sr-row:hover .sr-rowbtn, .sr-row:focus-within .sr-rowbtn, .sr-row.sr-speaking .sr-rowbtn { opacity: 0.85; }
+.sr-speak:hover, .sr-speak:focus-visible, .sr-row .sr-rowbtn:hover, .sr-row .sr-rowbtn:focus-visible { opacity: 1; border-color: var(--accent); }
 .sr-speak.speaking { opacity: 1; background: color-mix(in srgb, var(--accent) 25%, transparent); }
+#srPlayBtn.paused { background: var(--moderate); color: #000; border-color: transparent; }
 .sr-row.sr-speaking, .sr-log-row.sr-speaking { outline: 2px solid var(--accent); outline-offset: -2px; }
 #srPlayBtn.playing { background: var(--critical); color: #fff; border-color: transparent; }
 .sr-rate { gap: 4px; font-size: 11px; }

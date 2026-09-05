@@ -29,7 +29,7 @@ const ops = {
   storeGet: async (m) => store[m.key] ?? null, storeSet: async (m) => { store[m.key] = m.value; return true; }, storeRemove: async (m) => { delete store[m.key]; return true; },
   injectAxe: async () => { await target.addScriptTag({ content: axe }); await target.addScriptTag({ content: stub + bg }); return true; },
   runAxe: async (m) => target.evaluate(([r, rules]) => runAxeInPage(r, rules), [m.runOnly, m.rules]),
-  srTree: () => inPage(() => srTreeInPage()), langCheck: () => inPage(() => langCheckInPage()),
+  srTree: () => inPage(() => srTreeInPage()), langCheck: () => inPage(() => langCheckInPage()), nonTextContrast: () => inPage(() => nonTextContrastInPage()),
   srCompare: async (m) => ({ url: m.url, order: await inPage(() => srTreeInPage()), lang: await inPage(() => langCheckInPage()) }),
   liveStart: () => inPage(() => liveInstallInPage()), liveDrain: () => inPage(() => liveDrainInPage()), liveStop: () => inPage(() => liveStopInPage()),
   focusStart: () => inPage(() => focusInstallInPage()), focusDrain: () => inPage(() => focusDrainInPage()), focusStop: () => inPage(() => focusStopInPage()),
@@ -37,6 +37,7 @@ const ops = {
   axTreeAvailable: async () => true, axTree: () => globalThis.__axTreeTest(1),
   dlsCheck: () => inPage(() => dlsCheckInPage(DLS_DATA)), dlsComponents: () => inPage(() => dlsComponentAuditInPage(DLS_DATA)), dlsHighlight: async () => { dlsHighlightCalls++; return 0; },
   srApply: (m) => target.evaluate(([s, p]) => srApplyInPage(s, p), [m.selector, m.patch]), srUndo: (m) => target.evaluate((s) => srUndoInPage(s), m.selector),
+  pickStart: () => inPage(() => pickStartInPage()), pickCheck: () => inPage(() => pickCheckInPage()),
   highlight: async () => true, highlightAll: async (m) => { highlightAllCalls.push((m.items || []).length); return true; }, clearHighlights: async () => true, clickedCheck: async () => null, staleInstall: async () => true, staleCheck: async () => false, domCount: async () => 50,
 };
 const panel = await ctx.newPage();
@@ -58,8 +59,10 @@ await panel.addInitScript((targetUrl) => {
   const fakeSynth = {
     speaking: false, pending: false,
     speak(u) { window.__utts.push({ text: u.text, lang: u.lang, rate: u.rate, voice: u.voice && u.voice.name }); fakeSynth.speaking = true;
-      setTimeout(() => { fakeSynth.speaking = false; u.onend && u.onend({}); }, 20); },
+      const end = () => { if (fakeSynth.paused) { setTimeout(end, 10); return; } fakeSynth.speaking = false; u.onend && u.onend({}); };
+      setTimeout(end, 20); },
     cancel() { fakeSynth.speaking = false; },
+    pause() { fakeSynth.paused = true; }, resume() { fakeSynth.paused = false; },
     getVoices() { return [{ name: "Fake EN", lang: "en-US", default: true, localService: true }, { name: "Fake AR", lang: "ar-SA", default: false, localService: true }]; },
     addEventListener() {},
   };
@@ -130,6 +133,52 @@ const reqApply = await (async () => {
 })();
 console.log("required apply:", JSON.stringify(reqApply));
 if (reqApply.attr !== "true" || !reqApply.fixed || reqApply.after !== null || !reqApply.back) errors.push("required-not-exposed apply/undo mismatch: " + JSON.stringify(reqApply));
+// form group labelling: checkbox filter group and radio pair with no group name (group-no-label, container row), "Did you find this content useful?" + Yes/No
+// (question-not-associated on the question row), <label> without for / .form-label span next to an unnamed or placeholder-named field (label-not-associated);
+// fieldset+legend, named radiogroup, role=group aria-labelledby question, <label for> and a wrapped single checkbox stay clean
+const grouping = await panel.evaluate(() => {
+  const rows = srState.order.rows;
+  const find = (code, sel) => rows.find((r) => r.sel === sel && r.issues.some((i) => i.code === code));
+  const issue = (code, sel) => find(code, sel) && find(code, sel).issues.find((i) => i.code === code);
+  const fix = (code, sel) => { const r = find(code, sel); const i = issue(code, sel); return r && srFixFor(code, { html: r.html, sel: r.sel, role: r.role, name: r.name, tag: r.tag, attr: i.attr, info: i.info, hint: i.hint }); };
+  const rowEl = (sel) => [...document.querySelectorAll("#srOrderList .sr-row")].find((r) => r.dataset.srSel === sel);
+  const codes = /^(group-no-label|question-not-associated|label-not-associated)$/;
+  const exp = srResultsForExport().readingOrder.issues.filter((x) => codes.test(x.code));
+  const findings = A11yFixes.srFindings(srResultsForExport()).filter((f) => codes.test(f.code));
+  const anyClean = (sel) => !rows.some((r) => r.sel === sel && r.issues.some((i) => codes.test(i.code)));
+  const expAll = srResultsForExport().readingOrder.issues;
+  return { expTrade: expAll.find((x) => x.sel === "#tradeNo")?.issues.join(" | "), expCo: expAll.find((x) => x.sel === "#coName")?.issues.join(" | "), filter: issue("group-no-label", "#filterGroup"), plan: issue("group-no-label", "#planRadios"), question: issue("question-not-associated", "#usefulQ"), trade: issue("label-not-associated", "#tradeNo"), co: issue("label-not-associated", "#coName"),
+    clean: ["#okGroup", "#okRadios", "#okQ", "#okLabelled", "#agree", "#planA", "#planB", "#emiratesId", "#dob", "#fsOther", "#fsAria", "#sharedNameForm", "#pairBox", "#qDlgQ", "#hiddenQ", "#otpCode", "#otpSection", "#emailAddr"].map(anyClean),
+    // no group-no-label may land on a big container either (the old common-ancestor bucket put it on <form>/<main>)
+    noBigGroup: !rows.some((r) => /^(body|main|form|section)/.test(r.sel) && r.issues.some((i) => i.code === "group-no-label")),
+    roleGrp: issue("group-no-label", "#roleGrp"),
+    fixFilter: fix("group-no-label", "#filterGroup")?.snippet, fixQ: fix("question-not-associated", "#usefulQ")?.snippet, fixTrade: fix("label-not-associated", "#tradeNo")?.snippet, fixCo: fix("label-not-associated", "#coName")?.snippet,
+    rowCodes: ["#filterGroup", "#usefulQ", "#tradeNo"].map((sel) => rowEl(sel) && rowEl(sel).dataset.srCodes), fixBlocks: ["#filterGroup", "#usefulQ", "#tradeNo"].map((sel) => !!(rowEl(sel) && rowEl(sel).querySelector(".sr-fix"))),
+    applyInputs: ["#filterGroup", "#usefulQ", "#coName"].map((sel) => rowEl(sel) && rowEl(sel).querySelector(".sr-apply-input")?.value),
+    exp: exp.map((x) => x.code + ":" + x.sel).sort(), verify: findings.map((f) => f.code + ":" + f.level + ":" + (f.verify || "").slice(0, 40)).sort() };
+});
+console.log("form grouping:", JSON.stringify(grouping));
+if (grouping.filter?.level !== "serious" || grouping.filter?.info !== "checkbox" || grouping.filter?.hint !== "Emirate" || !grouping.noBigGroup || grouping.roleGrp?.info !== "checkbox" || grouping.roleGrp?.hint !== "Interests" || grouping.roleGrp?.msgArgs?.[0] !== 2 || grouping.plan?.info !== "radio" || grouping.plan?.hint !== "Billing plan" ||
+    grouping.question?.level !== "moderate" || grouping.question?.info !== "tight" || grouping.trade?.level !== "serious" || grouping.trade?.msgArgs?.[1] !== "Licence" || grouping.co?.info !== "Company name:" || grouping.co?.msgArgs?.[1] !== "Company" || grouping.clean.some((c) => !c) ||
+    !/<legend>Emirate<\/legend>/.test(grouping.fixFilter || "") || !/role="group" aria-labelledby="filterGroup-label"/.test(grouping.fixFilter || "") || !/role="group" aria-labelledby="usefulQ"/.test(grouping.fixQ || "") || !/aria-label="Yes — Did you find this content useful\?"/.test(grouping.fixQ || "") ||
+    !/<label for="tradeNo">Trade licence number<\/label>/.test(grouping.fixTrade || "") || !/<label for="coName">Company name<\/label>/.test(grouping.fixCo || "") || !/aria-labelledby="coName-label"/.test(grouping.fixCo || "") ||
+    !/group-no-label/.test(grouping.rowCodes[0] || "") || !/question-not-associated/.test(grouping.rowCodes[1] || "") || !/label-not-associated/.test(grouping.rowCodes[2] || "") || grouping.fixBlocks.some((b) => !b) ||
+    grouping.applyInputs.join("|") !== "Emirate|Did you find this content useful?|Company name" || grouping.exp.length !== 5 || !grouping.exp.includes("group-no-label:#roleGrp") || !grouping.exp.includes("question-not-associated:#usefulQ") || !grouping.exp.includes("group-no-label:#planRadios") || !grouping.exp.includes("label-not-associated:#tradeNo") ||
+    !/serious: visible label "Trade licence number"/.test(grouping.expTrade || "") || !/placeholder only/.test(grouping.expCo || "") || !/serious: visible label "Company name:"/.test(grouping.expCo || "") ||
+    grouping.verify.length !== 5 || !grouping.verify.some((v) => /^group-no-label:serious:Tab into the first option; the screen/.test(v)) || !grouping.verify.some((v) => /^label-not-associated:serious:Tab to the field; the announcement/.test(v)))
+  errors.push("form group labelling mismatch: " + JSON.stringify(grouping));
+// Apply on page for question-not-associated: role="group" + aria-label (the question) land on the PARENT (#usefulBox), the row turns fixed; Undo removes them
+const qApply = await (async () => {
+  await panel.evaluate(() => { const row = [...document.querySelectorAll("#srOrderList .sr-row")].find((r) => r.dataset.srSel === "#usefulQ"); row.querySelector(".sr-apply-btn").click(); });
+  await panel.waitForTimeout(2500);
+  const box = await target.evaluate(() => { const b = document.getElementById("usefulBox"); return { role: b.getAttribute("role"), label: b.getAttribute("aria-label"), qRole: document.getElementById("usefulQ").getAttribute("role") }; });
+  const fixed = await panel.evaluate(() => { const row = [...document.querySelectorAll("#srOrderList .sr-row")].find((r) => r.dataset.srSel === "#usefulQ"); const ok = row.classList.contains("fixed"); row.querySelector(".sr-undo")?.click(); return ok; });
+  await panel.waitForTimeout(2500);
+  const after = await target.evaluate(() => document.getElementById("usefulBox").getAttribute("role"));
+  return { ...box, fixed, after, back: await panel.evaluate(() => srState.order.rows.some((r) => r.sel === "#usefulQ" && r.issues.some((i) => i.code === "question-not-associated"))) };
+})();
+console.log("question apply:", JSON.stringify(qApply));
+if (qApply.role !== "group" || qApply.label !== "Did you find this content useful?" || qApply.qRole !== null || !qApply.fixed || qApply.after !== null || !qApply.back) errors.push("question-not-associated apply/undo mismatch: " + JSON.stringify(qApply));
 // link behaviour: target=_blank / formtarget without "opens in a new tab", PDF / download link without the file type, external host without "external",
 // href="#" / javascript: links acting as buttons (breadcrumb Home, current breadcrumb/pagination item, click handler) — hint fixtures and #top / role=button stay clean
 const links = await panel.evaluate(() => {
@@ -318,6 +367,83 @@ console.log("all rows:", await panel.locator("#srOrderList .sr-row").count(), "|
 console.log("SAMPLE FIXES:\n" + (await panel.evaluate(() => srState.order.rows.filter((r) => r.issues.length).slice(0, 12).map((r) => {
   const f = srFixFor(r.issues[0].code, { html: r.html, sel: r.sel, role: r.role, name: r.name, tag: r.tag });
   return `--- [${r.issues[0].code}] ${r.html}\n${f ? f.snippet : "(no fix)"}`; }).join("\n"))));
+// Playback scoping (all rows shown): per-row "play from here" / "play this section" buttons, the filter as a scope, Space/Esc keys, play from a picked element
+const scoped = await panel.evaluate(async () => {
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const list = document.getElementById("srOrderList");
+  const rows = () => [...list.querySelectorAll(".sr-row")];
+  const playable = () => rows().filter((r) => !r.hidden && r.__srSpeech && r.__srSpeech.text);
+  const out = { rows: rows().length, speak: list.querySelectorAll(".sr-speak").length, from: list.querySelectorAll(".sr-play-from").length, sub: list.querySelectorAll(".sr-play-subtree").length,
+    speakerIcon: !!list.querySelector(".sr-speak svg use[href='#i-speaker']"), fromTitle: list.querySelector(".sr-play-from")?.title, scopeTitle: srPlayBtn.title, scopeN: playable().length };
+  const finish = async (n) => { await wait(40 * (n + 2)); };
+  // play from here: 3rd row records rows 3..N only
+  window.__utts.length = 0;
+  rows()[2].querySelector(".sr-play-from").click();
+  await wait(30);
+  out.fromPlayingLabel = srPlayBtn.textContent;
+  await finish(playable().length);
+  const expectFrom = playable().slice(playable().indexOf(rows()[2])).map((r) => r.__srSpeech.text);
+  out.fromOk = window.__utts.length === expectFrom.length && window.__utts.every((u, i) => u.text === expectFrom[i]) && expectFrom.length < playable().length;
+  out.fromCount = window.__utts.length;
+  // subtree: the aegov-card group row reads only its descendants (the three links)
+  const card = rows().find((r) => r.__srSpeech && /Offers card/.test(r.__srSpeech.text));
+  window.__utts.length = 0;
+  card.querySelector(".sr-play-subtree").click();
+  await finish(8);
+  const cardSel = card.__srSpeech.sel;
+  const after = rows()[rows().indexOf(card) + 5];
+  out.subTexts = window.__utts.map((u) => u.text);
+  const inCard = (txt) => rows().some((r) => r.__srSpeech && r.__srSpeech.text === txt && (r.__srSpeech.sel === cardSel || r.__srSpeech.sel.startsWith(cardSel + " > ")));
+  out.subOk = window.__utts[0].text === card.__srSpeech.text && window.__utts.every((u) => inCard(u.text)) &&
+    out.subTexts.filter((x) => /^Read more, (link|رابط)/.test(x)).length === 2 && out.subTexts.some((x) => /^click here, (link|رابط)/.test(x)) && !out.subTexts.includes(after.__srSpeech.text);
+  // filter as scope: "button" then Play page records only the visible rows
+  const box = document.getElementById("srFilterInput");
+  box.value = "button"; box.dispatchEvent(new Event("input"));
+  await wait(50);
+  out.filterScope = srPlayBtn.title;
+  const vis = playable();
+  window.__utts.length = 0;
+  srPlayBtn.click();
+  await finish(vis.length);
+  out.filterOk = vis.length && vis.length < rows().length && window.__utts.length === vis.length && window.__utts.every((u, i) => u.text === vis[i].__srSpeech.text);
+  out.filterCount = window.__utts.length + "/" + vis.length + "/" + rows().length;
+  box.value = ""; box.dispatchEvent(new Event("input"));
+  await wait(50);
+  // Space pauses/resumes (row stays highlighted), Escape stops
+  window.__utts.length = 0;
+  srPlayBtn.click();
+  await wait(30);
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true }));
+  await wait(30);
+  out.paused = srSpeech.paused && speechSynthesis.paused === true && !!list.querySelector(".sr-row.sr-speaking") && srPlayBtn.classList.contains("paused");
+  out.pausedStatus = document.getElementById("status").textContent;
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true }));
+  await wait(30);
+  out.resumed = !srSpeech.paused && speechSynthesis.paused === false && srSpeech.playing;
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+  await wait(30);
+  const n = window.__utts.length;
+  await wait(200);
+  out.escOk = !srSpeech.playing && window.__utts.length === n && n < playable().length && !list.querySelector(".sr-row.sr-speaking") && /^(Play page|تشغيل الصفحة)/.test(srPlayBtn.textContent);
+  // Space does nothing when nothing is playing
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true }));
+  out.idleSpace = !srSpeech.playing && !srSpeech.paused;
+  return out;
+});
+console.log("scoped playback:", JSON.stringify(scoped));
+if (!scoped.rows || scoped.from !== scoped.speak || scoped.sub !== scoped.speak || !scoped.speakerIcon || !scoped.fromTitle || !new RegExp("\\b" + scoped.scopeN + "\\b").test(scoped.scopeTitle) ||
+    !/^(Stop|إيقاف)/.test(scoped.fromPlayingLabel) || !scoped.fromOk || !scoped.subOk || !scoped.filterOk || !/\b\d+\b/.test(scoped.filterScope) || scoped.filterScope === scoped.scopeTitle ||
+    !scoped.paused || !/^(Paused|متوقف مؤقتاً)/.test(scoped.pausedStatus) || !scoped.resumed || !scoped.escOk || !scoped.idleSpace) errors.push("scoped playback mismatch: " + JSON.stringify(scoped));
+// Play from element: the page picker returns a selector; playback starts at the matching row (click on the "click here" link)
+await panel.evaluate(() => { window.__utts.length = 0; document.getElementById("srPlayPickBtn").click(); });
+await panel.waitForTimeout(300);
+await target.click("a[href='/c']");
+await panel.waitForTimeout(1500);
+const picked = await panel.evaluate(() => ({ first: window.__utts[0] && window.__utts[0].text, n: window.__utts.length, status: document.getElementById("status").textContent, btnEnabled: !document.getElementById("srPlayPickBtn").disabled,
+  noRow: (() => { srStopSpeech(); return srRowForSelector("#no-such-element > span:nth-child(1)", srOrderList) === null; })(),
+  ancestor: (() => { const a = [...srOrderList.querySelectorAll(".sr-row")].find((r) => r.__srSpeech && /^click here/.test(r.__srSpeech.text)); return srRowForSelector(a.__srSpeech.sel + " > span:nth-child(1)", srOrderList) === a; })() }));
+console.log("play from element:", JSON.stringify(picked));
+if (!/^click here, (link|رابط)/.test(picked.first || "") || picked.n < 2 || !picked.btnEnabled || !picked.noRow || !picked.ancestor) errors.push("play from element mismatch: " + JSON.stringify(picked));
 // framework-aware fix snippets: switch the framework setting and re-render the order rows
 for (const fw of ["react", "vue", "html"]) {
   const r = await panel.evaluate((fw) => {
@@ -375,6 +501,32 @@ if (!grouped.length) errors.push("manual findings lack the ×2 group note");
 await panel.click("#srLangBtn"); await panel.waitForTimeout(500);
 console.log("lang stats:", await panel.textContent("#srLangStats"), "| rows:", await panel.locator("#srLangList .sr-row").count(), "| fixes:", await panel.locator("#srLangList .sr-fix").count());
 console.log("LANG FIX:", await panel.evaluate(() => [...document.querySelectorAll("#srLangList .sr-fix .fix-snippet:not(.sr-current)")].map((c) => c.textContent).join("\n---\n")));
+// non-text contrast (WCAG 1.4.11): #ddd input border, #bbb icon-only button, #ccc toggle fail at 3:1; the #767676 border, dark icon, disabled field stay clean
+await panel.evaluate(() => { document.getElementById("srNtcSection").open = true; });
+await panel.click("#srNtcBtn"); await panel.waitForTimeout(800);
+const ntc = await panel.evaluate(() => {
+  const r = srState.ntc;
+  const rows = [...document.querySelectorAll("#srNtcList .sr-row")];
+  const exp = srResultsForExport().nonTextContrast;
+  const fixOf = (sel) => { const i = r.issues.find((x) => x.sel === sel); return i && srFixFor(i.code, srNtcFixCtx(i)); };
+  const dlsBefore = settings.dlsContrast; settings.dlsContrast = true; const dlsFix = fixOf("#ntcInput"); settings.dlsContrast = dlsBefore;
+  return { sels: r.issues.map((i) => i.sel).sort(), kinds: r.issues.map((i) => i.kind).sort(), ratios: r.issues.every((i) => i.ratio > 0 && i.ratio < 3), levels: r.issues.every((i) => i.level === "serious" && i.code === "nontext-contrast"),
+    rows: rows.length, swatches: document.querySelectorAll("#srNtcList .dls-swatch").length, fixes: document.querySelectorAll("#srNtcList .sr-fix").length, stats: document.getElementById("srNtcStats").textContent,
+    step: document.querySelector('#srSteps .step[data-step="5"]').dataset.state, stepState: document.querySelector('#srSteps .step[data-step="5"] .step-state').textContent, title: document.querySelector("#srNtcSection .step-title").textContent,
+    fixBorder: fixOf("#ntcInput").snippet, fixIcon: fixOf("#ntcIcon").snippet, fixBg: fixOf("#ntcToggle").snippet, dlsFix: dlsFix.snippet + " " + dlsFix.note,
+    exported: exp && exp.issues.length, expChecked: exp && exp.checked, expFix: exp && exp.issues.every((i) => i.fix && i.fix.snippet), score: srScoreCompute().breakdown.ntc, penalty: srScoreCompute().penalty,
+    html: /Non-text contrast \(WCAG 1\.4\.11\)/.test(srSectionHtml()), findings: A11yFixes.srFindings(srResultsForExport()).filter((f) => f.section === "ntc").map((f) => f.verify),
+    status: document.getElementById("status").textContent, badge: document.querySelector("#tabs button[data-view='sr']").title,
+    // best-candidate rule + unknown backgrounds: hamburger (faint border, dark glyph), Material filled field (border-bottom), light submit input, white-rect logo, control over a gradient stay clean
+    cleanNew: ["#ntcHamburger", "#ntcFilled", "#ntcSubmitLight", "#ntcLogo", "#ntcOnImage"].filter((sel) => r.issues.some((i) => i.sel === sel)),
+    msgLocalised: rows[0] && rows[0].querySelector(".sr-issue").textContent };
+});
+console.log("non-text contrast:", JSON.stringify(ntc));
+if (ntc.cleanNew.length || !/(3:1|WCAG 1\.4\.11)/.test(ntc.msgLocalised || "")) errors.push("non-text contrast false positives / message: " + JSON.stringify(ntc.cleanNew) + " " + ntc.msgLocalised);
+if (ntc.sels.join() !== "#ntcIcon,#ntcInput,#ntcToggle" || ntc.kinds.join() !== "background,border,icon" || !ntc.ratios || !ntc.levels || ntc.rows !== 3 || ntc.swatches !== 6 || ntc.fixes !== 3 ||
+    !/\b3\b/.test(ntc.stats) || ntc.step !== "issues" || !/3/.test(ntc.stepState) || !ntc.title || !/border: 1px solid #[0-9a-f]{6}/.test(ntc.fixBorder) || !/svg \{\n  fill: #[0-9a-f]{6}/.test(ntc.fixIcon) || !/background-color: #[0-9a-f]{6}/.test(ntc.fixBg) ||
+    !/DLS [a-z]+-\d+/.test(ntc.dlsFix) || ntc.exported !== 3 || !(ntc.expChecked >= 3) || !ntc.expFix || ntc.score !== 3 || !ntc.html || ntc.findings.length !== 3 || !ntc.findings.every((v) => /3:1/.test(v)) || !/3/.test(ntc.status) || !/3/.test(ntc.badge))
+  errors.push("non-text contrast mismatch: " + JSON.stringify(ntc));
 // bilingual comparison: compare the page against itself → 0 differences
 await panel.evaluate(() => { document.getElementById("srCmpSection").open = true; }); // step 5 is collapsed by default
 await panel.fill("#srCmpUrl", await target.url()); await panel.click("#srCmpBtn"); await panel.waitForTimeout(1500);
@@ -478,29 +630,79 @@ const focusHear = await panel.evaluate(async () => {
 });
 console.log("focus hear it:", JSON.stringify(focusHear));
 if (!focusHear.btns || !focusHear.text) errors.push("focus hear-it mismatch");
+// focus-ring contrast / thickness / clipping: the trace measures the ring on every :focus-visible stop (keyboard interaction first so script focus counts as focus-visible)
+await target.keyboard.press("Shift");
+for (const id of ["ringFaint", "ringClipped", "ringBorder", "ringShadow", "ringOnImage"]) { await target.evaluate((i) => document.getElementById(i).focus(), id); await target.waitForTimeout(150); }
+await panel.waitForTimeout(1200);
+const ringTrace = await panel.evaluate(() => {
+  const by = (id) => srState.focus.log.filter((e) => e.sel === "#" + id).pop();
+  const faint = by("ringFaint"), clipped = by("ringClipped"), border = by("ringBorder"), shadow = by("ringShadow"), onImage = by("ringOnImage");
+  const codes = (e) => (e && e.issues || []).map((i) => i.code);
+  const row = (id) => [...document.querySelectorAll("#srFocusLog .sr-row")].find((r) => r.dataset.srSel === "#" + id);
+  const fixes = { low: srFixFor("focus-ring-low-contrast", { html: faint && faint.html, tag: "button", ringBg: "#ffffff", ringContrast: 1.6 }), thin: srFixFor("focus-ring-thin", { html: "<button>x</button>", tag: "button", ringWidth: 1 }),
+    clip: srFixFor("focus-ring-clipped", { html: clipped && clipped.html, tag: "button", info: "#ringClipBox" }) };
+  return { faint: codes(faint), faintRing: faint && faint.ring, clipped: codes(clipped), clippedRing: clipped && clipped.ring, border: codes(border), borderRing: border && border.ring,
+    faintRow: !!row("ringFaint"), badge: row("ringFaint") ? row("ringFaint").querySelector(".sr-ring")?.textContent : "", fixCount: row("ringFaint") ? row("ringFaint").querySelectorAll(".sr-fix").length : 0,
+    fixLow: fixes.low.snippet, fixClip: fixes.clip.snippet, fixThin: fixes.thin.snippet,
+    verify: A11yFixes.srVerifyStep("focus-ring-clipped", {}), exported: srResultsForExport().focusTrace.issues.filter((x) => /focus-ring/.test(x.code)).length,
+    msg: faint && faint.issues.map((i) => i.msg).join(" | "),
+    // the 3px ring layer wins over the persistent offset inset shadow; a ring over a gradient has an unknown contrast and no low-contrast finding
+    shadow: codes(shadow), shadowRing: shadow && shadow.ring, onImage: codes(onImage), onImageRing: onImage && onImage.ring, onImageBadge: onImage && onImage.ring ? t("srRingFmt", onImage.ring.kind, onImage.ring.width, onImage.ring.contrast) : "" };
+});
+console.log("focus ring:", JSON.stringify(ringTrace));
+if (!ringTrace.shadowRing || ringTrace.shadowRing.kind !== "box-shadow" || !(ringTrace.shadowRing.contrast >= 3) || ringTrace.shadowRing.width !== 3 || ringTrace.shadow.length ||
+    !ringTrace.onImageRing || ringTrace.onImageRing.contrast !== null || ringTrace.onImage.some((c) => c === "focus-ring-low-contrast") || !/unknown|مجهول/.test(ringTrace.onImageBadge))
+  errors.push("focus ring shadow/image mismatch: " + JSON.stringify({ shadow: ringTrace.shadow, shadowRing: ringTrace.shadowRing, onImage: ringTrace.onImage, onImageRing: ringTrace.onImageRing, badge: ringTrace.onImageBadge }));
+if (!ringTrace.faint.includes("focus-ring-low-contrast") || !ringTrace.faint.includes("focus-ring-thin") || !ringTrace.faintRing || ringTrace.faintRing.kind !== "outline" || !(ringTrace.faintRing.contrast < 3) || !/\d\.\d:1/.test(ringTrace.msg) ||
+    !ringTrace.clipped.includes("focus-ring-clipped") || ringTrace.clipped.includes("focus-ring-low-contrast") || ringTrace.clipped.includes("focus-ring-thin") ||
+    !ringTrace.borderRing || ringTrace.borderRing.kind !== "border" || ringTrace.border.length ||
+    !ringTrace.faintRow || !/outline 1px/.test(ringTrace.badge) || ringTrace.fixCount < 2 || ringTrace.exported < 2 ||
+    !/:focus-visible[\s\S]*outline: 3px solid #1a4480/.test(ringTrace.fixLow) || !/overflow: visible/.test(ringTrace.fixClip) || !/#ringClipBox/.test(ringTrace.fixClip) || !/3px/.test(ringTrace.fixThin) || !/four sides/.test(ringTrace.verify))
+  errors.push("focus ring mismatch: " + JSON.stringify(ringTrace));
 // keyboard auto-walk: focus every Tab stop in Tab order, summary line + structural findings in the focus log
 const walk = await (async () => {
   const movesBefore = await panel.evaluate(() => srState.focus.log.filter((e) => e.kind !== "nav" && e.kind !== "walk").length);
   await panel.click("#srWalkBtn");
   await panel.waitForTimeout(4000);
+  // the walk visits every Tab stop on the (growing) test page — wait for the button to come back rather than guessing a duration
+  for (let i = 0; i < 100 && await panel.evaluate(() => document.getElementById("srWalkBtn").disabled); i++) await panel.waitForTimeout(250);
   const r = await panel.evaluate(() => {
     const w = srState.focus.walk;
     const entries = srState.focus.log.filter((e) => e.kind === "walk");
     const codes = [...new Set(entries.map((e) => e.issues[0].code))];
-    const fixes = entries.map((e) => srFixFor(e.issues[0].code, { html: e.html, sel: e.sel, role: e.role, name: e.name, tag: e.tag })).filter(Boolean).length;
+    const fixes = entries.map((e) => srFixFor(e.issues[0].code, { html: e.html, sel: e.sel, role: e.role, name: e.name, tag: e.tag, info: e.issues[0].info })).filter(Boolean).length;
+    // custom widget keyboard probe: click-only tablists + click-only div role=button flagged, roving-tabindex tablist + keyboard-aware div clean
+    const widgetEntries = entries.filter((e) => /^widget-/.test(e.issues[0].code));
+    const widgetFlag = (...sels) => widgetEntries.filter((e) => sels.some((sel) => e.sel === sel || (e.sel || "").startsWith(sel + " ") || e.issues[0].msg.includes("(" + sel + ")"))).map((e) => e.issues[0].code);
+    const badTabs = widgetFlag("#kbdBadTabs", "#kbdBadTab1", "#kbdBadTab2");
+    const badFix = badTabs.length ? srFixFor("widget-no-arrow-nav", { html: "<div role=\"tablist\" id=\"kbdBadTabs\">", sel: "#kbdBadTabs", role: "tablist", tag: "div", info: "tablist" }) : null;
+    const widgets = { probed: w && w.probed, results: w && w.widgets.length, flagged: widgetEntries.length, badTabs, fakeTabs: widgetFlag("#fakeTabs", "#tabA", "#tabB"),
+      goodTabs: widgetFlag("#kbdGoodTabs", "#kbdGoodTab1", "#kbdGoodTab2"), goodBtn: widgetFlag("#kbdGoodBtn"), teamCard: widgetFlag("#teamCard"),
+      okRadios: widgetFlag("#okRadios"), nativePopup: widgetFlag("#kbdNativePopup"), risky: widgetFlag("#kbdRisky"), lastTabs: widgetFlag("#kbdLastTabs", "#kbdLastTab1", "#kbdLastTab2"), escOnPopup: widgetFlag("#kbdEscOnPopup"),
+      riskyFired: null, badFix: badFix && badFix.snippet, badNote: badFix && badFix.note, verify: A11yFixes.srVerifyStep("widget-no-arrow-nav", { info: "tablist" }),
+      levels: [...new Set(widgetEntries.map((e) => e.issues[0].code + ":" + e.issues[0].level))].sort(), summaryHint: /custom widget|عنصر مخصّص/.test(document.getElementById("srWalkSummary").textContent) };
     return { summary: document.getElementById("srWalkSummary").textContent, hidden: document.getElementById("srWalkSummary").hidden, reached: w && w.reached, candidates: w && w.candidates,
-      unreachable: w && w.unreachable.map((x) => `${x.sel} (${x.reason})`), jumps: w && w.jumps.length, traps: w && w.traps.length, entries: entries.length, codes, fixes,
+      unreachable: w && w.unreachable.map((x) => `${x.sel} (${x.reason})`), jumps: w && w.jumps.length, traps: w && w.traps.length, entries: entries.length, codes, fixes, widgets,
       walkMoves: srState.focus.log.filter((e) => e.via === "walk").length, moves: srState.focus.log.filter((e) => e.kind !== "nav" && e.kind !== "walk").length,
       btn: document.getElementById("srWalkBtn").textContent, disabled: document.getElementById("srWalkBtn").disabled, rows: document.querySelectorAll("#srFocusLog .sr-row").length,
-      stats: document.getElementById("srFocusStats").textContent, running: srState.focus.running, exported: srResultsForExport().focusTrace.issues.filter((x) => /unreachable|order jump|possible trap/.test(x.issues.join(" "))).length };
+      stats: document.getElementById("srFocusStats").textContent, running: srState.focus.running, exported: srResultsForExport().focusTrace.issues.filter((x) => /unreachable|order jump|possible trap|custom widget/.test(x.issues.join(" "))).length };
   });
   const active = await target.evaluate(() => document.activeElement && document.activeElement.tagName);
+  r.widgets.riskyFired = await target.evaluate(() => document.getElementById("kbdRisky").dataset.fired || null);
   return { movesBefore, ...r, active };
 })();
 console.log("auto-walk:", JSON.stringify(walk));
 if (walk.hidden || !(walk.reached > 5) || walk.reached > walk.candidates || !/\d+/.test(walk.summary) || walk.disabled || !/Auto-walk|جولة/.test(walk.btn) || !walk.running ||
-    walk.walkMoves < 5 || walk.moves <= walk.movesBefore || walk.entries !== (walk.unreachable.length + walk.jumps + walk.traps) || walk.fixes !== walk.entries || walk.exported !== walk.entries) errors.push("auto-walk mismatch");
-if (walk.entries && !walk.codes.every((c) => /^(unreachable|order-jump|possible-trap)$/.test(c))) errors.push("auto-walk codes mismatch");
+    walk.walkMoves < 5 || walk.moves <= walk.movesBefore || walk.entries !== (walk.unreachable.length + walk.jumps + walk.traps + walk.widgets.flagged) || walk.fixes !== walk.entries || walk.exported !== walk.entries) errors.push("auto-walk mismatch");
+if (walk.entries && !walk.codes.every((c) => /^(unreachable|order-jump|possible-trap|widget-no-arrow-nav|widget-no-enter-space|widget-esc-no-close)$/.test(c))) errors.push("auto-walk codes mismatch");
+// widget probe: the two click-only tablists and the click-only team card are hinted; the roving-tabindex tablist, the keyboard-aware picker and the native radiogroup are not
+const wp = walk.widgets;
+if (!(wp.probed >= 4) || !(wp.results >= 4) || !wp.summaryHint ||
+    JSON.stringify(wp.badTabs) !== '["widget-no-arrow-nav"]' || JSON.stringify(wp.fakeTabs) !== '["widget-no-arrow-nav"]' || JSON.stringify(wp.teamCard) !== '["widget-no-enter-space"]' ||
+    wp.goodTabs.length || wp.goodBtn.length || wp.okRadios.length || wp.nativePopup.length || wp.risky.length || wp.riskyFired || wp.lastTabs.length || wp.escOnPopup.length ||
+    !wp.levels.includes("widget-no-arrow-nav:serious") || !wp.levels.includes("widget-no-enter-space:moderate") ||
+    !/roving tabindex/.test(wp.badFix) || !/ArrowRight: i \+ 1/.test(wp.badFix) || !/aria-selected/.test(wp.badFix) || !/verify|real keyboard/.test(wp.badNote) || !/arrow keys/.test(wp.verify))
+  errors.push("widget probe mismatch: " + JSON.stringify(wp));
 await panel.click("#srFocusBtn"); await panel.click("#srLiveBtn"); await panel.waitForTimeout(500);
 console.log("buttons after stop:", await panel.textContent("#srFocusBtn"), "/", await panel.textContent("#srLiveBtn"));
 // the SPA clicks left a hash route and a title on the page; put the URL back so the per-URL storage keys below match target.url()

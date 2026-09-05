@@ -209,15 +209,22 @@ function pickStartInPage() {
   if (window.__a11yLensPickHandler) {
     document.removeEventListener("click", window.__a11yLensPickHandler, true);
   }
+  // same shape as srTreeInPage's cssPath (depth 6, shadow-aware) so the picked selector matches a reading-order row
   const cssPath = (el) => {
     const parts = [];
     let cur = el;
-    for (let depth = 0; cur && cur.nodeType === 1 && depth < 5; depth++) {
+    for (let depth = 0; cur && cur.nodeType === 1 && depth < 6; depth++) {
       if (cur.id) { parts.unshift("#" + CSS.escape(cur.id)); break; }
       const tag = cur.tagName.toLowerCase();
       if (tag === "body" || tag === "html") { parts.unshift(tag); break; }
       const parent = cur.parentElement;
-      const idx = parent ? [...parent.children].indexOf(cur) + 1 : 1;
+      if (!parent) {
+        const root = cur.getRootNode && cur.getRootNode();
+        if (root && root.host) return cssPath(root.host) + " >>> " + [tag, ...parts].join(" > ");
+        parts.unshift(tag);
+        break;
+      }
+      const idx = [...parent.children].indexOf(cur) + 1;
       parts.unshift(`${tag}:nth-child(${idx})`);
       cur = parent;
     }
@@ -1186,7 +1193,7 @@ function srTreeInPage() {
   const REQ_RE = /(?<!\*)\*(?!\*)|\brequired\b|\bmandatory\b|مطلوب|إلزامي|إجباري/i;
   const REQ_AFTER_RE = /^\*$|\brequired\b|\bmandatory\b|مطلوب|إلزامي|إجباري/i;
   const textBefore = (container, el) => { try { const r = document.createRange(); r.setStart(container, 0); r.setEndBefore(el); return r.toString().replace(/\s+/g, " ").trim(); } catch (_) { return ""; } };
-  const fieldsIn = (el) => el.querySelectorAll("input:not([type='hidden']),select,textarea,[role='textbox'],[role='combobox']").length;
+  const fieldsIn = (el) => el.querySelectorAll("input:not([type='hidden']),select,textarea,[role='textbox'],[role='combobox'],[role='checkbox'],[role='radio'],[role='switch']").length;
   // Visible "*" / "required" next to a field that exposes neither required nor aria-required.
   const requiredIssue = (el, role, tag, name) => {
     const isField = /^(textbox|searchbox|combobox|spinbutton|listbox|slider)$/.test(role) || /^(input|select|textarea)$/.test(tag);
@@ -1310,6 +1317,136 @@ function srTreeInPage() {
     return "";
   };
 
+  // ---- form group labelling: checkbox/radio groups without a group name, a question followed by Yes/No buttons, a visible label not linked ----
+  const isSrVisible = (el) => { try { const vn = axe.utils.getNodeFromTree(el); return vn ? D.isVisibleToScreenReaders(vn) : false; } catch (_) { return false; } };
+  const textOfIds = (ids) => (ids || "").split(/\s+/).map((id) => { const d = id && document.getElementById(id); return d ? visibleText(d) : ""; }).filter(Boolean).join(" ");
+  // Group label: <fieldset> with a non-empty <legend>, or role=group/radiogroup with aria-label / aria-labelledby text.
+  const groupName = (el) => {
+    const tag = el.tagName.toLowerCase();
+    const ariaName = () => (el.getAttribute("aria-label") || "").trim() || textOfIds(el.getAttribute("aria-labelledby"));
+    if (tag === "fieldset") { const lg = [...el.children].find((c) => c.tagName === "LEGEND"); return (lg && visibleText(lg)) || ariaName(); }
+    if (/^(group|radiogroup)$/.test(el.getAttribute("role") || "")) return ariaName();
+    return "";
+  };
+  // Widest ancestor that contains only this control (its <label> / <li> / .form-check wrapper).
+  const WRAP_STOP = /^(form|fieldset|section|article|main|dialog|table|tbody|thead|ul|ol)$/i;
+  const wrapOf = (el, maxUp = 50) => { let cur = el; for (let i = 0; i < maxUp && cur.parentElement && cur.parentElement !== document.body && !WRAP_STOP.test(cur.parentElement.tagName) && fieldsIn(cur.parentElement) === 1; i++) cur = cur.parentElement; return cur; };
+  const commonAncestor = (els) => { let anc = els[0]; while (anc && !els.every((e) => anc.contains(e))) anc = anc.parentElement; return anc; };
+  // Map<container element, issue> — computed once before the walk, attached to the container's row.
+  const groupIssues = new Map();
+  try {
+    const ctls = [...document.querySelectorAll("input[type='checkbox'],input[type='radio'],[role='checkbox'],[role='radio']")]
+      .filter((c) => !c.closest(".__a11y_lens_overlay") && !c.closest("table,[role='grid'],[role='treegrid'],[role='menu'],[role='menubar'],[role='listbox']") && isSrVisible(c));
+    const GROUP_SEL = "fieldset,[role='group'],[role='radiogroup']";
+    const CTL_SEL = "input[type='checkbox'],input[type='radio'],[role='checkbox'],[role='radio']";
+    const groupIdx = new Map(); // nearest fieldset/group ancestor -> stable index, so a shared name= in two separate fieldsets makes two buckets
+    const buckets = new Map(); // name(+group) or container -> controls
+    for (const c of ctls) {
+      const nm = (c.getAttribute("name") || "").trim();
+      let key;
+      if (nm) {
+        const g = c.closest(GROUP_SEL);
+        if (g && !groupIdx.has(g)) groupIdx.set(g, groupIdx.size + 1);
+        key = "name:" + nm + "@" + (g ? groupIdx.get(g) : 0);
+      } else key = wrapOf(c).parentElement;
+      if (!key) continue;
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(c);
+    }
+    const grouped = new Set([...buckets.values()].filter((m) => m.length >= 2).flat());
+    // An ancestor names the group when it holds no OTHER group's controls (a text "Other: …" field inside the fieldset is fine; an outer <fieldset> around the whole form is not).
+    const holdsOtherGroup = (anc, members) => [...anc.querySelectorAll(CTL_SEL)].some((x) => grouped.has(x) && !members.includes(x));
+    for (const [key, members] of buckets) {
+      if (members.length < 2) continue;
+      const container = typeof key === "string" ? commonAncestor(members.map(wrapOf)) : key;
+      if (!container || container === document.body || container === document.documentElement || groupIssues.has(container)) continue;
+      // The whole group and nothing else: an outer <fieldset> around the entire form does not name this group.
+      if (typeof key !== "string" && fieldsIn(container) !== members.length) continue;
+      let labelled = "";
+      for (let anc = container; anc && anc !== document.body; anc = anc.parentElement) {
+        if (!anc.matches(GROUP_SEL)) continue;
+        if (holdsOtherGroup(anc, members)) break;
+        labelled = groupName(anc);
+        break;
+      }
+      if (labelled) continue;
+      const kind = /radio/i.test(members[0].getAttribute("type") || members[0].getAttribute("role") || "") ? "radio" : "checkbox";
+      // Candidate group name: the text inside the container before the first control, else the previous sibling's text.
+      let hint = textBefore(container, wrapOf(members[0]));
+      if (!hint) { const prev = container.previousElementSibling; hint = prev ? visibleText(prev) : ""; }
+      hint = hint.replace(/[:：]\s*$/, "").trim();
+      if (hint.length > 80) hint = "";
+      if (typeof key !== "string" && kind === "checkbox" && members.length < 3 && !hint) continue; // "Remember me" + "Subscribe" side by side: not a set
+      groupIssues.set(container, { level: "serious", code: "group-no-label", info: kind, hint, msgKey: "srMsgGroupNoLabel", msgArgs: [members.length, kind, hint],
+        msg: `${members.length} ${kind} controls form a group with no group name — no <fieldset>/<legend> and no role="group" with a label${hint ? ` (the visible "${hint}" is not linked)` : ""}; the screen reader announces each ${kind} by its own text only, never what the choice is about` });
+    }
+  } catch (_) {}
+  const YESNO_RE = /^(yes|no|ok|okay|cancel|true|false|agree|disagree|نعم|لا|موافق|غير موافق|إلغاء|حسناً|حسنا)$/i;
+  const BTN_SEL = "button,[role='button'],input[type='button'],input[type='submit']";
+  const btnName = (b) => { try { const vn = axe.utils.getNodeFromTree(b); return vn ? T.accessibleTextVirtual(vn).replace(/\s+/g, " ").trim() : visibleText(b); } catch (_) { return visibleText(b); } };
+  // Question text ("Did you find this useful?") followed within the next 2 siblings by 2+ generic Yes/No/OK/Cancel buttons with nothing tying them together.
+  const questionIssue = (el, direct) => {
+    if (!/\?\s*$/.test(direct || "") || direct.length > 200) return null;
+    const btns = [];
+    let sib = el.nextElementSibling;
+    for (let i = 0; sib && i < 2; i++, sib = sib.nextElementSibling) {
+      if (sib.matches(BTN_SEL)) btns.push(sib);
+      else btns.push(...sib.querySelectorAll(BTN_SEL));
+    }
+    // visible, and sitting next to each other (a hidden modal template deeper in the next section is not the answer to this question)
+    let generic = btns.filter((b) => isSrVisible(b) && YESNO_RE.test(btnName(b)));
+    if (generic.length >= 2) { const byParent = new Map(); for (const b of generic) { const k = b.parentElement; byParent.set(k, (byParent.get(k) || []).concat(b)); } generic = [...byParent.values()].sort((a, b) => b.length - a.length)[0]; }
+    if (generic.length < 2) return null;
+    const parent = el.parentElement;
+    if (!parent) return null;
+    if (el.tagName === "LEGEND" || parent.tagName === "FIELDSET") return null;
+    // Associated: a role=group/radiogroup ancestor named by (or with) the question, or each button describing/labelling itself by the question element.
+    const qText = direct.toLowerCase();
+    const ASSOC_ROLE = /^(group|radiogroup|dialog|alertdialog|region)$/;
+    for (let anc = parent; anc && anc !== document.body; anc = anc.parentElement) {
+      const gn = groupName(anc).toLowerCase();
+      if (gn && (gn === qText || qText.includes(gn) || gn.includes(qText.replace(/\?\s*$/, "").trim()))) return null;
+      const assoc = ASSOC_ROLE.test(anc.getAttribute("role") || "") || anc.tagName === "DIALOG";
+      if (assoc && el.id && (anc.getAttribute("aria-labelledby") || "").split(/\s+/).includes(el.id)) return null;
+      if (assoc && (anc.getAttribute("aria-label") || "").trim().toLowerCase() === qText) return null; // the question IS the dialog's name
+    }
+    if (el.id && generic.every((b) => ((b.getAttribute("aria-describedby") || "") + " " + (b.getAttribute("aria-labelledby") || "")).split(/\s+/).includes(el.id))) return null;
+    // "tight": the parent holds only the question and the buttons, so role="group" can go straight on it.
+    const kids = [...parent.children].filter((c) => !/^(script|style|template)$/i.test(c.tagName));
+    const tight = kids.every((c) => c === el || generic.includes(c) || (c.querySelector(BTN_SEL) && [...c.querySelectorAll(BTN_SEL)].every((b) => generic.includes(b))));
+    const names = generic.map((b) => `"${btnName(b)}"`).join(" / ");
+    return { level: "moderate", code: "question-not-associated", info: tight ? "tight" : "", hint: direct.trim(), msgKey: "srMsgQuestionNotAssoc", msgArgs: [names, direct.trim()],
+      msg: `${names} buttons are not associated with the question "${direct.trim()}" — in the buttons list (or when tabbing straight to them) the screen reader announces just ${names}, without what is being asked; wrap them in role="group" aria-labelledby pointing at the question` };
+  };
+  const LABEL_LIKE_SEL = "label,span,div,p,strong,b,td,th,dt";
+  const normLbl = (s) => (s || "").toLowerCase().replace(/[:：*]+\s*$/, "").replace(/\s+/g, " ").trim();
+  // Visible label text (a <label> without for, or a span/div with a "label" class or ending in ":") next to a field that it does not name.
+  const labelIssue = (el, role, tag, name) => {
+    const isField = /^(textbox|searchbox|combobox|spinbutton|listbox|slider|checkbox|radio|switch)$/.test(role) || /^(input|select|textarea)$/.test(tag);
+    if (!isField) return null;
+    if (tag === "input" && /^(hidden|submit|button|reset|image)$/.test(el.type || "")) return null;
+    if (el.closest("label") || (el.labels && el.labels.length)) return null; // wrapped or <label for>: already labelled (a differing group heading is the group's concern)
+    const labelLike = (n) => {
+      if (!n || n.nodeType !== 1 || !n.matches(LABEL_LIKE_SEL) || n.querySelector("input,select,textarea,button,a[href]")) return "";
+      const txt = visibleText(n);
+      if (!txt || txt.length > 80) return "";
+      if (n.tagName === "LABEL") return n.hasAttribute("for") ? "" : txt;
+      return /label/i.test(clsStr(n)) || /[:：]\s*$/.test(txt) ? txt : "";
+    };
+    const wrap = wrapOf(el, 2); // a form row, not the whole card/section around a lone field
+    const cands = [el.previousElementSibling, el.nextElementSibling];
+    if (wrap !== el) { cands.push(wrap.previousElementSibling); if (!/^(checkbox|radio)$/.test(role) && wrap.parentElement && wrap.parentElement.childElementCount <= 3) cands.push(wrap.parentElement.firstElementChild); }
+    let lbl = "", lblEl = null;
+    for (const c of cands) { if (c === el || c === wrap) continue; lbl = labelLike(c); if (lbl) { lblEl = c; break; } }
+    if (!lbl) return null;
+    if (lblEl.tagName === "LABEL" && el.labels && [...el.labels].includes(lblEl)) return null;
+    const want = normLbl(lbl), have = normLbl(name);
+    const fromPlaceholder = !!name && name === (el.getAttribute("placeholder") || "").replace(/\s+/g, " ").trim(); // placeholder-only stays "different": it disappears while typing
+    if (have && (have === want || have.includes(want) || (want.startsWith(have) && !fromPlaceholder))) return null; // "Email address" / "Name (required)" named "Email" / "Name": the label starts with the name
+    return { level: "serious", code: "label-not-associated", info: lbl, hint: lbl, msgKey: "srMsgLabelNotAssoc", msgArgs: [lbl, name],
+      msg: `visible label "${lbl}" is not linked to the field — announced as ${name ? `"${name}"` : "an unnamed " + role} instead; use <label for> so the text next to the field is what the screen reader (and voice control) gets` };
+  };
+
   const walk = (vnode, depth) => {
     if (rows.length >= 900) return;
     const el = vnode.actualNode;
@@ -1413,6 +1550,11 @@ function srTreeInPage() {
       const stp = stepperIssue(el, tag, role);
       if (stp) issues.push(stp);
       for (const li of linkIssues(el, role, tag, name)) issues.push(li);
+      const lbl = labelIssue(el, role, tag, name);
+      if (lbl) issues.push(lbl);
+      const grp = groupIssues.get(el);
+      if (grp) issues.push(grp);
+      if (!isInteractive) { const q = questionIssue(el, name || visibleText(el)); if (q) issues.push(q); }
       const idx = rows.length;
       rows.push({
         sel: cssPath(el), tag, role, name, states: stateOf(el, role), depth, lang: langOf(el), cls: clsOf(el), component: componentOf(el),
@@ -1455,12 +1597,21 @@ function srTreeInPage() {
           issuesTotal.count++;
         }
       }
+      // Unlabelled checkbox/radio group whose container has no role: emit the container so the fix wraps the whole group
+      const grp = !emitted && groupIssues.get(el);
+      if (grp) {
+        emitted = true;
+        rows.push({ sel: cssPath(el), tag, role: "generic", name: (grp.hint || visibleText(el)).slice(0, 80), states: [], depth, lang: langOf(el), cls: clsOf(el), component: componentOf(el), html: el.outerHTML.slice(0, 160), issues: [grp] });
+        issuesTotal.count++;
+      }
       // Plain text run: emit a text row so reading order is complete
       let direct = "";
       for (const c of el.childNodes) if (c.nodeType === 3) direct += c.data;
       direct = direct.replace(/\s+/g, " ").trim();
       if (direct && !emitted) {
-        rows.push({ sel: cssPath(el), tag, role: "text", name: direct.slice(0, 120), states: [], depth, lang: langOf(el), html: "", issues: [], live: liveOf(el, "") });
+        const q = questionIssue(el, direct);
+        rows.push({ sel: cssPath(el), tag, role: "text", name: direct.slice(0, 120), states: [], depth, lang: langOf(el), cls: q ? clsOf(el) : undefined, component: q ? componentOf(el) : undefined, html: q ? el.outerHTML.slice(0, 160) : "", issues: q ? [q] : [], live: liveOf(el, "") });
+        if (q) issuesTotal.count++;
       } else if (!emitted && liveOf(el, "")) {
         // role-less aria-live container (e.g. <div aria-live="polite"><p>…</p></div>): keep it in the tree so the bilingual comparison can pair it
         rows.push({ sel: cssPath(el), tag, role: "generic", name: visibleText(el).slice(0, 80), states: [], depth, lang: langOf(el), cls: clsOf(el), component: componentOf(el), html: el.outerHTML.slice(0, 160), issues: [], live: true });
@@ -1565,6 +1716,10 @@ function srApplyInPage(sel, patch) {
     const anc = el.closest(patch.closest);
     if (!anc) return { error: "no ancestor matching " + patch.closest };
     el = anc;
+  } else if (patch.parent) {
+    // the fix belongs on the element's parent (role="group" around a question and its Yes/No buttons)
+    if (!el.parentElement || el.parentElement === document.body) return { error: "the element has no parent to patch" };
+    el = el.parentElement;
   }
   const stack = (window.__a11yLensUndo = window.__a11yLensUndo || {});
   const original = el.outerHTML;
@@ -1662,6 +1817,160 @@ function srUndoInPage(sel) {
   for (const e of list) if (e.el === el) e.el = nu;
   if (!list.length) delete stack[sel];
   return { ok: true, remaining: list.length, html: nu.outerHTML.slice(0, 200) };
+}
+
+// Non-text contrast (WCAG 1.4.11) heuristic — axe has no rule for it. For every visible form
+// control, icon-only button/link and custom toggle, the "boundary" the sighted user relies on
+// (border, else the control's own background where it differs from its surroundings, else the
+// icon glyph) must reach 3:1 against the effective background behind it. Self-contained.
+function nonTextContrastInPage() {
+  const cssPath = (el) => {
+    const parts = [];
+    let cur = el;
+    for (let depth = 0; cur && cur.nodeType === 1 && depth < 6; depth++) {
+      if (cur.id) { parts.unshift("#" + CSS.escape(cur.id)); break; }
+      const tag = cur.tagName.toLowerCase();
+      if (tag === "body" || tag === "html") { parts.unshift(tag); break; }
+      const parent = cur.parentElement;
+      if (!parent) { parts.unshift(tag); break; }
+      parts.unshift(`${tag}:nth-child(${[...parent.children].indexOf(cur) + 1})`);
+      cur = parent;
+    }
+    return parts.join(" > ");
+  };
+  const parseColor = (s) => {
+    const m = /rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,\s/]+([\d.]+%?))?\s*\)/.exec(s || "");
+    if (!m) return null;
+    let a = m[4] == null ? 1 : parseFloat(m[4]);
+    if (m[4] && /%$/.test(m[4])) a /= 100;
+    return { r: +m[1], g: +m[2], b: +m[3], a };
+  };
+  const blend = (fg, bg) => ({ r: fg.r * fg.a + bg.r * (1 - fg.a), g: fg.g * fg.a + bg.g * (1 - fg.a), b: fg.b * fg.a + bg.b * (1 - fg.a), a: 1 });
+  const lum = (c) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b); };
+  const contrast = (a, b) => { const l1 = lum(a), l2 = lum(b); return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05); };
+  const hex = (c) => "#" + [c.r, c.g, c.b].map((v) => Math.round(v).toString(16).padStart(2, "0")).join("");
+  const up = (n) => n.parentElement || (n.getRootNode && n.getRootNode().host) || null;
+  // null when a background-image / gradient sits under the control before any opaque colour: the real background is unknown, not white
+  const effectiveBg = (from) => {
+    let out = { r: 255, g: 255, b: 255, a: 1 };
+    const layers = [];
+    for (let n = from; n && n.nodeType === 1; n = up(n)) {
+      const ncs = getComputedStyle(n);
+      if (ncs.backgroundImage && ncs.backgroundImage !== "none") return null;
+      const c = parseColor(ncs.backgroundColor);
+      if (c && c.a > 0) { layers.unshift(c); if (c.a >= 1) break; }
+    }
+    for (const l of layers) out = blend(l, out);
+    return out;
+  };
+  const visible = (el) => {
+    const r = el.getBoundingClientRect();
+    if (r.width < 1 || r.height < 1) return false;
+    for (let n = el; n && n.nodeType === 1; n = up(n)) {
+      const cs = getComputedStyle(n);
+      if (cs.display === "none" || cs.visibility === "hidden" || cs.opacity === "0") return false;
+    }
+    return true;
+  };
+  // rendered text (a visually-hidden label still names the control, but the user sees only the icon)
+  const hasVisibleText = (el) => {
+    const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let n = w.nextNode(); n; n = w.nextNode()) {
+      if (!n.data.trim()) continue;
+      const p = n.parentElement;
+      if (!p) continue;
+      const r = p.getBoundingClientRect();
+      if (r.width > 1 && r.height > 1 && getComputedStyle(p).fontSize !== "0px") return true;
+    }
+    return false;
+  };
+  const iconOf = (el) => el.querySelector("svg, img, i, [class*='icon'], [class*='fa-']");
+  const iconColor = (icon, bg) => {
+    // svg: fill, else stroke — of the svg or its first drawn shape; icon fonts: the text colour
+    const pick = (node) => {
+      const cs = getComputedStyle(node);
+      const fill = parseColor(cs.fill), stroke = parseColor(cs.stroke);
+      if (cs.fill !== "none" && fill && fill.a > 0) return { c: fill, prop: "fill" };
+      if (cs.stroke !== "none" && stroke && stroke.a > 0 && (parseFloat(cs.strokeWidth) || 0) > 0) return { c: stroke, prop: "stroke" };
+      return null;
+    };
+    if (icon.tagName.toLowerCase() === "svg") {
+      // the glyph is the shape with the strongest contrast — a white/brand background rect drawn first is not the icon
+      let best = null;
+      const shapes = [...icon.querySelectorAll("path, circle, rect, polygon, polyline, line, ellipse, use")].slice(0, 40);
+      for (const shape of shapes.length ? shapes : [icon]) {
+        const got = pick(shape) || (shape === icon ? null : pick(icon));
+        if (!got) continue;
+        const color = got.c.a < 1 ? blend(got.c, bg) : got.c;
+        const ratio = contrast(color, bg);
+        if (!best || ratio > best.ratio) best = { color, prop: got.prop, ratio };
+      }
+      if (!best) { const got = pick(icon); if (!got) return null; best = { color: got.c.a < 1 ? blend(got.c, bg) : got.c, prop: got.prop }; }
+      return { color: best.color, prop: best.prop };
+    }
+    if (icon.tagName.toLowerCase() === "img") return null; // bitmap — cannot read its colours
+    const c = parseColor(getComputedStyle(icon).color);
+    return c && c.a > 0 ? { color: c.a < 1 ? blend(c, bg) : c, prop: "color" } : null;
+  };
+  const roleOf = (el) => (el.getAttribute("role") || "").toLowerCase();
+  const disabled = (el) => el.disabled || el.getAttribute("aria-disabled") === "true" || !!el.closest("fieldset:disabled, [aria-disabled='true']");
+  const clsHas = (el, re) => typeof el.className === "string" && re.test(el.className);
+  const TOGGLE_RE = /(^|[\s_-])(toggle|switch)(er)?([\s_-]|$)/i;
+  const nameOf = (el) => (el.getAttribute("aria-label") || (el.labels && el.labels[0] && el.labels[0].textContent) || el.getAttribute("title") || el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 60);
+
+  const sel = "input:not([type=hidden]), select, textarea, button, a[href], [role=textbox], [role=combobox], [role=checkbox], [role=radio], [role=switch], [role=button], [role=slider], [role=spinbutton], .toggle, .switch, [class*=toggle], [class*=switch]";
+  const issues = [];
+  const failed = new Set();
+  let checked = 0, count = 0;
+  for (const el of document.querySelectorAll(sel)) {
+    if (count++ > 3000) break;
+    if (el.closest(".__a11y_lens_overlay")) continue;
+    const tag = el.tagName.toLowerCase();
+    const role = roleOf(el);
+    const isField = (/^(input|select|textarea)$/.test(tag) && !(tag === "input" && /^(button|submit|reset|image)$/.test(el.type || ""))) || /^(textbox|combobox|checkbox|radio|switch|slider|spinbutton)$/.test(role);
+    const isToggle = role === "switch" || clsHas(el, TOGGLE_RE);
+    const icon = iconOf(el);
+    const isIconOnly = !isField && (tag === "button" || tag === "a" || role === "button") && !!icon && !hasVisibleText(el);
+    if (!isField && !isToggle && !isIconOnly) continue;
+    if (isToggle && !isField && !isIconOnly && hasVisibleText(el)) continue; // a labelled "toggle" panel, not a control
+    if (!visible(el) || disabled(el)) continue;
+    let inFailed = false;
+    for (let n = up(el); n; n = up(n)) if (failed.has(n)) { inFailed = true; break; }
+    if (inFailed) continue;
+    checked++;
+    const cs = getComputedStyle(el);
+    const parent = up(el);
+    const surround = effectiveBg(parent || el);
+    if (!surround) continue; // a photo / gradient behind the control: the background is unknown, not white
+    // WCAG 1.4.11 needs ONE visual indicator at 3:1 — measure every candidate (each visible border side, the fill, the icon glyph) and judge the best
+    const cands = [];
+    const ownBg = parseColor(cs.backgroundColor);
+    for (const side of ["Top", "Right", "Bottom", "Left"]) {
+      const bw = parseFloat(cs["border" + side + "Width"]) || 0, bc = parseColor(cs["border" + side + "Color"]);
+      if (cs["border" + side + "Style"] !== "none" && bw > 0 && bc && bc.a > 0) cands.push({ kind: "border", prop: "border-color", color: bc.a < 1 ? blend(bc, surround) : bc, bg: surround });
+    }
+    if (ownBg && ownBg.a > 0 && hex(ownBg.a < 1 ? blend(ownBg, surround) : ownBg) !== hex(surround)) cands.push({ kind: "background", prop: "background-color", color: ownBg.a < 1 ? blend(ownBg, surround) : ownBg, bg: surround });
+    if (icon) {
+      const ibg = effectiveBg(el);
+      const ic = ibg && iconColor(icon, ibg);
+      if (ic) cands.push({ kind: "icon", prop: ic.prop, color: ic.color, bg: ibg });
+    }
+    if (!cands.length) continue; // native widget painting or a bitmap icon: nothing measurable
+    for (const c of cands) c.ratio = Math.round(contrast(c.color, c.bg) * 100) / 100;
+    const best = cands.sort((a, b) => b.ratio - a.ratio)[0];
+    if (best.ratio >= 3) continue;
+    const { kind, prop, color, bg, ratio } = best;
+    failed.add(el);
+    const what = kind === "border" ? "border" : kind === "background" ? "control background" : "icon";
+    issues.push({
+      code: "nontext-contrast", level: "serious", kind, prop, sel: cssPath(el), tag, role: role || (isField ? tag : tag === "a" ? "link" : "button"),
+      name: nameOf(el), html: el.outerHTML.slice(0, 300), color: hex(color), bg: hex(bg), ratio,
+      msgKey: "srMsgNontextContrast", msgArgs: [ratio.toFixed(2), kind, hex(color), hex(bg)],
+      msg: `Non-text contrast ${ratio.toFixed(2)}:1 — ${what} ${hex(color)} on ${hex(bg)}; a control's boundary, state indicator or icon needs 3:1 (WCAG 1.4.11)`,
+    });
+    if (issues.length >= 300) break;
+  }
+  return { url: location.href, checked, issues };
 }
 
 function langCheckInPage() {
@@ -2169,8 +2478,95 @@ function focusInstallInPage() {
     if (tag === "a" && !el.hasAttribute("href")) return "generic";
     return IMPLICIT[tag] || "generic";
   };
-  const state = { log: [], start: Date.now(), lastEl: null, timer: null, handler: null, seq: 0 };
+  const state = { log: [], start: Date.now(), lastEl: null, timer: null, handler: null, seq: 0, borders: new WeakMap() };
   const now = () => Date.now() - state.start;
+  // ---- focus ring: what the sighted keyboard user sees (outline → box-shadow → border change) ----
+  const parseColor = (s) => {
+    const m = /rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,\s/]+([\d.]+%?))?\s*\)/.exec(s || "");
+    if (!m) return null;
+    let a = m[4] == null ? 1 : parseFloat(m[4]);
+    if (m[4] && /%$/.test(m[4])) a /= 100;
+    return { r: +m[1], g: +m[2], b: +m[3], a };
+  };
+  const blend = (fg, bg) => ({ r: fg.r * fg.a + bg.r * (1 - fg.a), g: fg.g * fg.a + bg.g * (1 - fg.a), b: fg.b * fg.a + bg.b * (1 - fg.a), a: 1 });
+  const lum = (c) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b); };
+  const contrast = (a, b) => { const l1 = lum(a), l2 = lum(b); return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05); };
+  const hex = (c) => "#" + [c.r, c.g, c.b].map((v) => Math.round(v).toString(16).padStart(2, "0")).join("");
+  const effectiveBg = (from) => {
+    // walk up until a non-transparent background; page default is white
+    // null when a background-image / gradient is hit first: the ring sits on a photo, contrast cannot be measured
+    let out = { r: 255, g: 255, b: 255, a: 1 };
+    const layers = [];
+    for (let n = from; n && n.nodeType === 1; n = n.parentElement || (n.getRootNode && n.getRootNode().host) || null) {
+      const ncs = getComputedStyle(n);
+      if (ncs.backgroundImage && ncs.backgroundImage !== "none") return null;
+      const c = parseColor(ncs.backgroundColor);
+      if (c && c.a > 0) { layers.unshift(c); if (c.a >= 1) break; }
+    }
+    for (const l of layers) out = blend(l, out);
+    return out;
+  };
+  const borderSig = (cs) => [cs.borderTopColor, cs.borderTopWidth, cs.borderTopStyle].join("|");
+  const cacheBorder = (el) => { try { if (el && el.nodeType === 1 && el.isConnected && el !== document.body) state.borders.set(el, borderSig(getComputedStyle(el))); } catch (_) {} };
+  const focusRing = (el, cs) => {
+    let ring = null;
+    const ow = parseFloat(cs.outlineWidth) || 0;
+    // outline-style:auto is the browser's own dual-tone ring (always visible, ~2px): only its clipping can be wrong
+    if (cs.outlineStyle !== "none" && ow > 0) ring = { kind: "outline", color: parseColor(cs.outlineColor), width: cs.outlineStyle === "auto" ? Math.max(ow, 2) : ow, offset: parseFloat(cs.outlineOffset) || 0, auto: cs.outlineStyle === "auto" };
+    if (!ring && cs.boxShadow && cs.boxShadow !== "none") {
+      // computed form: "rgb(r, g, b) 0px 0px 0px 3px[, ...]" — every layer; only ring-shaped ones (no x/y offset, spread or blur) count,
+      // an elevation / inset drop shadow that is always there is not the focus indicator; the most visible ring wins
+      const layers = cs.boxShadow.split(/,(?![^(]*\))/).map((x) => x.trim());
+      let best = null;
+      for (const layer of layers) {
+        const color = parseColor(layer);
+        const nums = (layer.replace(/rgba?\([^)]*\)/, "").match(/-?[\d.]+(?=px)/g) || []).map(Number);
+        const x = nums[0] || 0, y = nums[1] || 0, blur = nums[2] || 0, spread = nums[3] || 0;
+        if (x !== 0 || y !== 0) continue;
+        const inset = /\binset\b/.test(layer);
+        const w = spread > 0 ? spread + blur / 2 : blur / 2;
+        if (!(color && color.a > 0 && w > 0)) continue;
+        const cand = { kind: "box-shadow", color, width: Math.round(w * 10) / 10, offset: inset ? -w : 0 };
+        const bg = effectiveBg(inset ? el : (el.parentElement || (el.getRootNode && el.getRootNode().host) || el));
+        cand.score = bg ? contrast(color.a < 1 ? blend(color, bg) : color, bg) : 0;
+        if (!best || cand.score > best.score) best = cand;
+      }
+      ring = best;
+    }
+    if (!ring) {
+      const before = state.borders.get(el);
+      const nowSig = borderSig(cs);
+      const bw = parseFloat(cs.borderTopWidth) || 0;
+      if (before && before !== nowSig && cs.borderTopStyle !== "none" && bw > 0) ring = { kind: "border", color: parseColor(cs.borderTopColor), width: bw, offset: -bw };
+    }
+    if (!ring || !ring.color || ring.color.a === 0) return null;
+    // contrast: the ring sits on the parent's background (outside the box) or on the element's own (inset / border)
+    const bgEl = ring.offset < 0 ? el : (el.parentElement || (el.getRootNode && el.getRootNode().host) || el);
+    const bg = effectiveBg(bgEl);
+    if (bg) {
+      const rc = ring.color.a < 1 ? blend(ring.color, bg) : ring.color;
+      ring.contrast = Math.round(contrast(rc, bg) * 100) / 100;
+      ring.bg = hex(bg);
+      ring.color = hex(rc);
+    } else { ring.contrast = null; ring.bg = null; ring.color = hex(ring.color); } // photo / gradient behind: measure by hand
+    // clipping: an overflow-clipping ancestor whose box does not contain the element box expanded by the ring
+    const extent = Math.max(0, ring.width + ring.offset);
+    if (extent > 0) {
+      const r = el.getBoundingClientRect();
+      const need = { left: r.left - extent, top: r.top - extent, right: r.right + extent, bottom: r.bottom + extent };
+      for (let n = el.parentElement || (el.getRootNode && el.getRootNode().host) || null; n && n !== document.body && n !== document.documentElement; n = n.parentElement || (n.getRootNode && n.getRootNode().host) || null) {
+        const ncs = getComputedStyle(n);
+        const ox = ncs.overflowX, oy = ncs.overflowY;
+        const clips = (v) => /^(hidden|auto|scroll|clip)$/.test(v);
+        if (!clips(ox) && !clips(oy)) continue;
+        const b = n.getBoundingClientRect();
+        const cutX = clips(ox) && (need.left < b.left - 0.5 || need.right > b.right + 0.5);
+        const cutY = clips(oy) && (need.top < b.top - 0.5 || need.bottom > b.bottom + 0.5);
+        if (cutX || cutY) { ring.clippedBy = { sel: cssPath(n), overflow: clips(ox) && clips(oy) && ox === oy ? ox : `${ox} ${oy}` }; break; }
+      }
+    }
+    return ring;
+  };
   const push = (e) => { e.at = Date.now(); state.log.push(e); if (state.log.length > 400) state.log.shift(); }; // `at`: wall clock, so the panel can merge logs into one timeline
   const deepActive = () => {
     let a = document.activeElement;
@@ -2219,7 +2615,16 @@ function focusInstallInPage() {
     let modal = null;
     try { modal = document.querySelector("dialog[open],[role='dialog'][aria-modal='true'],[role='alertdialog'][aria-modal='true']"); } catch (_) {}
     if (modal && modal.getClientRects().length && !modal.contains(el)) entry.issues.push({ level: "critical", code: "modal-escape", msg: "focus escaped the open modal dialog — the dialog does not trap focus" });
-    if (cs.outlineStyle === "none" && cs.boxShadow === "none" && el.matches(":focus-visible")) entry.issues.push({ level: "moderate", code: "no-focus-style", msg: "no outline or box-shadow while focus-visible — check that a visible focus style exists (WCAG 2.4.7)" });
+    if (el.matches(":focus-visible")) {
+      const ring = focusRing(el, cs);
+      if (!ring) entry.issues.push({ level: "moderate", code: "no-focus-style", msg: "no outline, box-shadow or border change while focus-visible — check that a visible focus style exists (WCAG 2.4.7)" });
+      else {
+        entry.ring = { kind: ring.kind, color: ring.color, width: ring.width, offset: ring.offset, contrast: ring.contrast, bg: ring.bg };
+        if (!ring.auto && ring.contrast != null && ring.contrast < 3) entry.issues.push({ level: "serious", code: "focus-ring-low-contrast", msgKey: "srMsgFocusRingLowContrast", msgArgs: [ring.kind, ring.color, ring.contrast.toFixed(1), ring.bg], msg: `focus ring (${ring.kind} ${ring.color}) has ${ring.contrast.toFixed(1)}:1 contrast against its background ${ring.bg} — needs 3:1 (WCAG 2.4.11 / 1.4.11)` });
+        if (!ring.auto && ring.width < 2) entry.issues.push({ level: "minor", code: "focus-ring-thin", msgKey: "srMsgFocusRingThin", msgArgs: [ring.width, ring.kind], msg: `focus ring is only ${ring.width}px thick (${ring.kind}) — use at least 2px so it is noticed` });
+        if (ring.clippedBy) entry.issues.push({ level: "moderate", code: "focus-ring-clipped", info: ring.clippedBy.sel, msgKey: "srMsgFocusRingClipped", msgArgs: [ring.clippedBy.overflow, ring.clippedBy.sel, ring.kind, ring.width + ring.offset], msg: `focus ring is cut off by an ancestor with overflow:${ring.clippedBy.overflow} (${ring.clippedBy.sel}) — the ${ring.kind} extends ${ring.width + ring.offset}px outside the element` });
+      }
+    }
     if (entry.role === "textbox" && !entry.issues.length && el.getAttribute("placeholder") && !el.labels?.length && !a("aria-label") && !a("aria-labelledby")) entry.issues.push({ level: "serious", code: "placeholder-only", msg: "text field is named by its placeholder only" });
     push(entry);
   };
@@ -2229,16 +2634,27 @@ function focusInstallInPage() {
     setTimeout(() => record(target, state.walkVia || "event"), 30); // let :focus styles and scroll settle
   };
   document.addEventListener("focusin", state.handler, true);
+  // remember each element's un-focused border so a border-colour-only focus style is still recognised as a ring
+  state.outHandler = (e) => {
+    const target = (e.composedPath && e.composedPath()[0]) || e.target;
+    setTimeout(() => { if (deepActive() !== target) cacheBorder(target); }, 0);
+  };
+  document.addEventListener("focusout", state.outHandler, true);
   state.timer = setInterval(() => {
     if (!document.hasFocus()) return;
     const ae = deepActive();
     if (ae !== state.lastEl) {
+      if (state.lastEl && state.lastEl !== document.body) cacheBorder(state.lastEl);
       if (ae === document.body && state.lastEl && !state.lastEl.isConnected) record(document.body, "poll");
       else if (ae === document.body) record(document.body, "poll");
       else if (ae) record(ae, "poll");
     }
   }, 300);
   state.lastEl = deepActive();
+  try { // seed the un-focused border cache for the usual Tab stops (skipping whatever is focused now)
+    const seeds = document.querySelectorAll("a[href],button,input,select,textarea,summary,[tabindex]");
+    for (let i = 0; i < seeds.length && i < 1500; i++) if (seeds[i] !== state.lastEl) cacheBorder(seeds[i]);
+  } catch (_) {}
   window.__a11yFocus = state;
   return { already: false };
 }
@@ -2322,7 +2738,122 @@ async function focusWalkInPage(maxSteps) {
     return "focus() was refused by the browser";
   };
   const entry = (el, extra) => Object.assign({ t: Date.now() - s.start, sel: cssPath(el), tag: el.tagName.toLowerCase(), role: roleOf(el), name: nameOf(el), html: el.outerHTML.slice(0, 200), tabindex: el.tabIndex }, extra);
-  const result = { candidates: candidates.length, steps: Math.min(cap, candidates.length), truncated: candidates.length > cap, reached: 0, unreachable: [], jumps: [], traps: [] };
+  const result = { candidates: candidates.length, steps: Math.min(cap, candidates.length), truncated: candidates.length > cap, reached: 0, unreachable: [], jumps: [], traps: [], widgets: [], probed: 0, probeCapped: false };
+
+  // Custom widget keyboard probe (hints only): synthetic keys reach JS handlers but never native
+  // activation, so a silent result means "verify by hand", not a proven failure.
+  const PROBE_CAP = 40;
+  const ARROW_ROLES = "tablist|radiogroup|listbox|menu|menubar|tree|grid";
+  const ARROW_SEL = "[role='tablist'],[role='radiogroup'],[role='listbox'],[role='menu'],[role='menubar'],[role='tree'],[role='grid']";
+  const POPUP_SEL = "[role='listbox'],[role='menu'],[role='dialog'],[role='grid'],dialog,[aria-expanded='true']";
+  const probedContainers = new Set();
+  const isVisible = (n) => n && n.isConnected && n.getClientRects().length > 0 && getComputedStyle(n).visibility !== "hidden";
+  const visiblePopups = () => new Set([...document.querySelectorAll(POPUP_SEL)].filter(isVisible));
+  const stateOf = (root) => {
+    const out = [];
+    for (const n of [root, ...root.querySelectorAll("*")]) {
+      for (const a of ["aria-selected", "aria-expanded", "aria-checked", "aria-activedescendant", "aria-pressed"]) if (n.hasAttribute(a)) out.push(a + "=" + n.getAttribute(a));
+    }
+    return out.join("|");
+  };
+  const KEYS = { ArrowRight: 39, ArrowDown: 40, ArrowLeft: 37, ArrowUp: 38, Enter: 13, " ": 32, Escape: 27 };
+  // Names whose real activation must not be fired mid-audit (the probe runs real handlers on div/span buttons).
+  const RISKY_NAME_RE = /\b(delete|remove|logout|log out|sign out|sign in|login|submit|send|pay|checkout|accept|agree|confirm|cancel|close|reject|decline)\b|حذف|إزالة|خروج|تسجيل|إرسال|دفع|موافق|قبول|إلغاء|إغلاق|رفض/i;
+  const sendKey = (el, key) => {
+    const code = key === " " ? "Space" : key;
+    const init = { key, code, keyCode: KEYS[key], which: KEYS[key], bubbles: true, cancelable: true, composed: true };
+    el.dispatchEvent(new KeyboardEvent("keydown", init));
+    if (key === "Enter" || key === " ") el.dispatchEvent(new KeyboardEvent("keypress", init));
+    el.dispatchEvent(new KeyboardEvent("keyup", init));
+  };
+  // press one key and report what it changed within 150 ms
+  const press = async (el, key, scope) => {
+    const focusBefore = deepActive(), stateBefore = stateOf(scope), popupsBefore = visiblePopups();
+    let mutations = 0;
+    const mo = new MutationObserver((list) => { mutations += list.length; });
+    mo.observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
+    sendKey(el, key);
+    await wait(150);
+    mo.disconnect();
+    const popupsAfter = visiblePopups();
+    const opened = [...popupsAfter].filter((n) => !popupsBefore.has(n) && n !== el && n !== scope);
+    const expandedNow = (el.getAttribute("aria-expanded") === "true" && stateBefore.indexOf("aria-expanded=true") < 0);
+    const r = { key, focus: deepActive() !== focusBefore, aria: stateOf(scope) !== stateBefore, popup: opened.length > 0 || expandedNow, popups: opened, dom: mutations > 0 };
+    r.changed = r.focus || r.aria || r.popup || r.dom;
+    return r;
+  };
+  const changedWhat = (rs) => {
+    const w = [];
+    if (rs.some((r) => r.focus)) w.push("focus moved");
+    if (rs.some((r) => r.aria)) w.push("aria state changed");
+    if (rs.some((r) => r.popup)) w.push("popup opened");
+    if (rs.some((r) => r.dom)) w.push("DOM changed");
+    return w.join(", ");
+  };
+  const probeWidget = async (el) => {
+    if (result.probed >= PROBE_CAP) { result.probeCapped = true; return; }
+    const tag = el.tagName.toLowerCase();
+    if (/^(select|textarea)$/.test(tag) || (tag === "input" && /^(date|time|datetime-local|month|week|submit|reset|image|radio|checkbox|file|color|range)$/.test(el.type)) || el.isContentEditable) return;
+    if (tag === "button" && el.type === "submit" && el.form) return;
+    const container = el.closest(ARROW_SEL);
+    const role = roleOf(el);
+    const arrowWidget = container && new RegExp("^(" + ARROW_ROLES + ")$").test(container.getAttribute("role").split(/\s+/)[0]) && !probedContainers.has(container) && !(tag === "input");
+    // Only where native activation does not exist: a native <button>/<a href>/<input> trigger gets Enter/Space → click from the browser,
+    // and an <input role="combobox"> autocomplete opens on typing — synthetic keys would flag both wrongly.
+    const nativeActivation = tag === "button" || tag === "input" || (tag === "a" && el.hasAttribute("href")) || tag === "summary";
+    const popupWidget = !nativeActivation && (role === "combobox" || (el.hasAttribute("aria-haspopup") && el.getAttribute("aria-haspopup") !== "false") || (role === "button" && /^(div|span)$/.test(tag)));
+    if (!arrowWidget && !popupWidget) return;
+    const inForm = !!el.closest("form");
+    const risky = RISKY_NAME_RE.test(nameOf(el)) || el.hasAttribute("href") || el.hasAttribute("data-href");
+    const activate = popupWidget && !inForm && !risky; // Enter inside a form could submit it; a "Delete"/"Logout" div must not be fired for real
+    if (!arrowWidget && !activate) return;
+    result.probed++;
+    const scope = container && arrowWidget ? container : el;
+    const refocus = async () => { if (deepActive() !== el) { try { el.focus({ preventScroll: true }); } catch (_) {} await wait(30); } };
+    const widgetRole = arrowWidget ? container.getAttribute("role").split(/\s+/)[0] : role;
+    let openedPopup = null;
+    try {
+      if (arrowWidget) {
+        probedContainers.add(container);
+        // both directions: a non-wrapping tablist on its last item, or an RTL widget, moves on ArrowLeft/ArrowUp only
+        const rs = [];
+        for (const k of ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"]) {
+          rs.push(await press(el, k, scope));
+          await refocus();
+          if (rs[rs.length - 1].changed) break;
+        }
+        const ok = rs.some((r) => r.changed);
+        result.widgets.push(entry(el, { widget: widgetRole, container: cssPath(container), check: "arrow", keys: rs.map((r) => r.key), ok, changed: changedWhat(rs) }));
+      }
+      if (activate) {
+        const rs = [];
+        const keys = role === "combobox" || el.hasAttribute("aria-haspopup") ? ["Enter", " ", "ArrowDown"] : ["Enter", " "];
+        for (const k of keys) {
+          const r = await press(el, k, scope);
+          rs.push(r);
+          if (r.popup) { openedPopup = r; break; }
+          await refocus();
+        }
+        const ok = rs.some((r) => r.changed);
+        result.widgets.push(entry(el, { widget: widgetRole, check: "activate", keys: rs.map((r) => r.key), ok, changed: changedWhat(rs), haspopup: el.getAttribute("aria-haspopup") || "" }));
+        if (openedPopup) {
+          // Escape goes to whatever holds focus now (APG menus/listboxes handle it on the popup), then to the popup itself, then to the trigger
+          const isOpen = () => openedPopup.popups.some(isVisible) || el.getAttribute("aria-expanded") === "true";
+          const escTargets = [deepActive() || el, openedPopup.popups[0], el].filter((n, i, a) => n && a.indexOf(n) === i);
+          let esc = null;
+          for (const tgt of escTargets) { esc = await press(tgt, "Escape", scope); if (!isOpen()) break; }
+          const stillOpen = isOpen();
+          result.widgets.push(entry(el, { widget: widgetRole, check: "escape", keys: ["Escape"], ok: !stillOpen, changed: changedWhat([esc]) }));
+        }
+      }
+    } finally {
+      // always restore: Escape, blur, re-focus the original stop
+      try { sendKey(deepActive() || el, "Escape"); } catch (_) {}
+      const a = deepActive();
+      if (a && a !== document.body && a !== el) { try { a.blur(); } catch (_) {} }
+      await refocus();
+    }
+  };
   const origin = deepActive();
   const wasMuted = window.__a11yLensMuted;
   window.__a11yLensMuted = true;
@@ -2345,6 +2876,7 @@ async function focusWalkInPage(maxSteps) {
         const why = trapHost.hasAttribute("onkeydown") ? "inside a container with an onkeydown handler" : "inside role=\"dialog\" without aria-modal";
         if (!result.traps.some((x) => x.container === cssPath(trapHost))) result.traps.push(entry(el, { container: cssPath(trapHost), reason: why }));
       }
+      await probeWidget(el);
       prev = el;
     }
     await wait(80); // let the trace's delayed focusin record settle
@@ -2363,6 +2895,7 @@ function focusStopInPage() {
   const s = window.__a11yFocus;
   if (s) {
     try { document.removeEventListener("focusin", s.handler, true); } catch (_) {}
+    try { document.removeEventListener("focusout", s.outHandler, true); } catch (_) {}
     clearInterval(s.timer);
   }
   window.__a11yFocus = null;
@@ -2635,6 +3168,8 @@ EXT.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         return { result: await exec(tabId, srTreeInPage) };
       case "langCheck":
         return { result: await exec(tabId, langCheckInPage) };
+      case "nonTextContrast":
+        return { result: await exec(tabId, nonTextContrastInPage) };
       case "srCompare":
         return { result: await srCompareInTab(msg.url) };
       case "srApply":

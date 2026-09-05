@@ -49,6 +49,9 @@
         <symbol id="i-wand" viewBox="0 0 16 16"><path d="M2 14l8-8M10 6l2-2M12 1.5v1.5M14.5 4H13M11 2.5l.5.5M13.5 6l.5.5"/></symbol>
         <symbol id="i-undo" viewBox="0 0 16 16"><path d="M3 6h7a3 3 0 0 1 0 6H6M3 6l3-3M3 6l3 3"/></symbol>
         <symbol id="i-file" viewBox="0 0 16 16"><path d="M4 1.5h5l4 4v9H4zM9 1.5v4h4"/></symbol>
+        <symbol id="i-play-from" viewBox="0 0 16 16"><path d="M2 3v10M6 3l7 5-7 5z"/></symbol>
+        <symbol id="i-play-subtree" viewBox="0 0 16 16"><path d="M2 3h6M2 6.5h4M2 10h4M2 13.5h6M9 7l5 3-5 3z"/></symbol>
+        <symbol id="i-pick" viewBox="0 0 16 16"><path d="M2.5 2.5l5 11 1.5-4.5 4.5-1.5zM9 9l4.5 4.5"/></symbol>
         <symbol id="i-ticket" viewBox="0 0 16 16"><path d="M2 4h12v3a1.5 1.5 0 0 0 0 2v3H2V9a1.5 1.5 0 0 0 0-2zM6 4v8"/></symbol>
       </defs>
     </svg>
@@ -297,6 +300,7 @@
             </summary>
             <div class="sr-toolbar">
               <button id="srPlayBtn" class="btn sr-speech" title="Read the rows below aloud, top to bottom">Play page</button>
+              <button id="srPlayPickBtn" class="btn sr-speech" title="Click an element on the page, then play from its row">Play from element</button>
               <label class="check sr-speech sr-rate" title="Speech rate"><span id="srRateLabel">rate</span> <input type="range" id="srRate" min="0.8" max="2" step="0.1" value="1" /> <span id="srRateVal">1.0×</span></label>
               <span id="srOrderStats" class="sr-stats"></span>
             </div>
@@ -332,7 +336,7 @@
               <span class="step-actions"><button id="srFocusBtn" class="btn"></button></span>
             </summary>
             <div class="sr-toolbar">
-              <button id="srWalkBtn" class="btn" title="Move focus through every Tab stop automatically and report unreachable stops, order jumps and trap candidates">Auto-walk</button>
+              <button id="srWalkBtn" class="btn" title="Move focus through every Tab stop automatically and report unreachable stops, order jumps, trap candidates and custom widgets that ignore arrow keys / Enter / Space / Escape (synthetic keys — hints to verify by hand)">Auto-walk</button>
               <button id="srFocusClearBtn" class="btn">Clear log</button>
               <label class="check"><input type="checkbox" id="srFocusIssuesOnly" /> <span class="lbl">issues only</span></label>
               <span id="srFocusStats" class="sr-stats"></span>
@@ -358,9 +362,26 @@
           </details>
         </li>
         <li class="step" data-step="5" data-state="idle">
-          <details class="sr-section" id="srCmpSection">
+          <details class="sr-section" id="srNtcSection">
             <summary class="section-summary step-summary">
               <span class="step-num">5</span>
+              <svg class="ic i-chevron" aria-hidden="true"><use href="#i-chevron"/></svg>
+              <span class="step-title"></span>
+              <span class="step-state"></span>
+              <span class="spacer"></span>
+              <span class="step-actions"><button id="srNtcBtn" class="btn"></button></span>
+            </summary>
+            <div class="sr-toolbar">
+              <span id="srNtcStats" class="sr-stats"></span>
+            </div>
+            <p class="empty" id="srNtcNote"></p>
+            <div id="srNtcList"></div>
+          </details>
+        </li>
+        <li class="step" data-step="6" data-state="idle">
+          <details class="sr-section" id="srCmpSection">
+            <summary class="section-summary step-summary">
+              <span class="step-num">6</span>
               <svg class="ic i-chevron" aria-hidden="true"><use href="#i-chevron"/></svg>
               <span class="step-title"></span>
               <span class="step-state"></span><span class="step-opt"></span>
@@ -375,10 +396,10 @@
             <div id="srCmpList"></div>
           </details>
         </li>
-        <li class="step" data-step="6" data-state="idle">
+        <li class="step" data-step="7" data-state="idle">
           <details class="sr-section" id="srAxSection">
             <summary class="section-summary step-summary">
-              <span class="step-num">6</span>
+              <span class="step-num">7</span>
               <svg class="ic i-chevron" aria-hidden="true"><use href="#i-chevron"/></svg>
               <span class="step-title"></span>
               <span class="step-state"></span><span class="step-opt"></span>
