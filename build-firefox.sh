@@ -19,6 +19,8 @@ m = json.load(open(path))
 # Firefox MV3 uses event pages, not service workers
 m["background"] = {"scripts": ["background.js"]}
 m.pop("minimum_chrome_version", None)
+# chrome.debugger does not exist in Firefox — the browser AX-tree feature is Chromium-only
+m.pop("optional_permissions", None)
 m["browser_specific_settings"] = {
     "gecko": {
         "id": "a11y-lens@engagendy.dev",  # AMO identity — never change, even after rebrand

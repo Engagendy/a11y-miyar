@@ -386,7 +386,7 @@ function previewPatch(ruleId, node, opts) {
 
 // ---------- Markdown report ----------
 
-function issuesMarkdown(report, manualResults, opts) {
+function issuesMarkdown(report, manualResults, opts, srResults) {
   const lines = [];
   const violations = (report && report.violations) || [];
   const counts = {};
@@ -467,10 +467,458 @@ function issuesMarkdown(report, manualResults, opts) {
     });
   }
 
+  const srFindingsList = srFindings(srResults);
+  if (srFindingsList.length) {
+    lines.push("## Screen reader findings");
+    lines.push("");
+    lines.push("- **Findings:** " + srFindingsList.length + " (from the Screen reader tab: reading order, live regions, focus, language" + (srResults.journey ? ", journey" : "") + (srResults.bilingual ? ", bilingual comparison" : "") + ")");
+    lines.push("");
+    srFindingsList.forEach(function (f) {
+      lines.push("### " + f.title);
+      lines.push("");
+      lines.push("- **Impact:** " + f.level);
+      lines.push("- **Source:** " + f.sectionLabel);
+      lines.push("");
+      lines.push("**Problem:** " + f.msg);
+      lines.push("");
+      lines.push("**Element:** " + (f.sel ? "`" + f.sel + "`" : "(page)") + (f.instances > 1 ? " — " + f.instances + " identical instances" : ""));
+      if (f.instances > 1 && f.selectors.length > 1) {
+        lines.push("");
+        f.selectors.forEach(function (sel) { lines.push("- `" + sel + "`"); });
+      }
+      if (f.html) {
+        var htmlFence = mdFence(f.html);
+        lines.push("");
+        lines.push(htmlFence + "html");
+        lines.push(f.html);
+        lines.push(htmlFence);
+      }
+      if (f.fix) {
+        lines.push("");
+        lines.push("**Fix:**" + (f.fix.framework && f.fix.framework !== "html" ? " (" + f.fix.framework + ")" : ""));
+        lines.push("");
+        var fixFence = mdFence(f.fix.snippet || "");
+        lines.push(fixFence + (f.fix.framework === "react" ? "jsx" : f.fix.framework === "vue" ? "vue" : "html"));
+        lines.push(f.fix.snippet || "");
+        lines.push(fixFence);
+        if (f.fix.note) {
+          lines.push("");
+          lines.push(f.fix.note);
+        }
+      }
+      lines.push("");
+      lines.push("**How to verify:** " + f.verify);
+      lines.push("");
+      lines.push("- [ ] Fix " + (f.sel ? "`" + f.sel + "`" : f.sectionLabel));
+      lines.push("");
+    });
+  }
+
   return lines.join("\n");
 }
 
-const A11yFixes = { suggestFix, contrastFix, previewPatch, issuesMarkdown, DLS_COLORS };
+// ---------- Screen reader findings (Screen reader tab export -> tickets) ----------
+
+// srVerifyStep(code, ctx) -> one-line manual verification step for a screen reader finding.
+// ctx: { name, role, text, sel, snippet, declared, detected }
+function srVerifyStep(code, ctx) {
+  ctx = ctx || {};
+  var role = ctx.role || "control";
+  var name = ctx.name ? "'" + ctx.name + "'" : "'<name>'";
+  var text = ctx.text ? "'" + String(ctx.text).slice(0, 50) + "'" : "the update";
+  var snip = ctx.snippet ? "'" + String(ctx.snippet).slice(0, 40) + "'" : "the wrapped span";
+  switch (code) {
+    case "no-name":
+      return "Tab to the control; expected announcement: " + name + ", " + role + ".";
+    case "img-no-name":
+      return "Arrow to the image with the screen reader; expected: the alt text (or nothing at all if decorative).";
+    case "empty-heading":
+      return "Press H to jump between headings; every stop must announce a heading with text.";
+    case "generic-name":
+    case "dup-name":
+      return "Open the links/buttons list (VoiceOver rotor / NVDA elements list); every entry must be unique and say where it goes.";
+    case "placeholder-only":
+      return "Tab into the field and type; the label must still be announced and stay visible after typing.";
+    case "title-only":
+      return "Tab to the control; expected announcement: " + name + ", " + role + " (title tooltips are not announced reliably).";
+    case "label-in-name":
+      return "With voice control say 'click " + (ctx.name ? ctx.name : "<visible text>") + "'; the control must activate.";
+    case "long-name":
+      return "Tab to the control; the announcement must be short (under ~60 characters) with details in the description.";
+    case "not-focusable":
+    case "clickable-no-role":
+    case "a-no-href":
+      return "Tab through the page; the control must receive focus, be announced as " + (code === "a-no-href" ? "link or button" : "button") + ", and activate with Enter/Space.";
+    case "tabindex-neg":
+    case "positive-tabindex":
+    case "order-jump":
+      return "Tab through the page from the top; focus must follow the visual/DOM order with no jumps.";
+    case "dup-landmark":
+      return "Open the landmarks list (VoiceOver rotor / NVDA D key); each landmark must have a distinct name.";
+    case "hidden-focusable":
+    case "in-aria-hidden":
+      return "Tab through the page; focus must never land on an element the screen reader does not announce.";
+    case "focus-lost":
+      return "Delete the item; focus must land on the next item or heading (never on <body>).";
+    case "modal-escape":
+      return "Tab from the last control in the dialog; focus must wrap inside the dialog. Escape must close it and return focus to the opener.";
+    case "dialog-no-focus":
+      return "Open the dialog; focus and the announcement must move to its title or first control.";
+    case "no-focus-style":
+      return "Tab to the control; a visible focus ring must appear.";
+    case "invisible":
+    case "offscreen":
+    case "skip-offscreen":
+      return "Tab to the element; it must be visible on screen while focused.";
+    case "unreachable":
+      return "Tab through the page; the control must be reachable (or be removed from the Tab sequence if it is meant to be hidden).";
+    case "possible-trap":
+      return "Tab and Shift+Tab at both ends of the container and press Escape; focus must be able to leave it.";
+    case "state-missing":
+    case "state-not-announced": {
+      var st = { "aria-expanded": "'expanded' / 'collapsed'", "aria-selected": "'selected'", "aria-checked": "'checked' / 'not checked'", "aria-current": "'current'", "aria-pressed": "'pressed' / 'not pressed'" }[ctx.attr] || "the new state (pressed / selected / expanded / checked)";
+      return "Activate the control with a screen reader running; expect " + st + " announced on the control itself after every toggle.";
+    }
+    case "required-not-exposed":
+      return "Tab to the field; the announcement must end with 'required' (and the asterisk must be explained once above the form).";
+    case "readonly-misuse":
+      return "Tab to the field; it must not be announced as 'read only', and typing a value (plus the picker button) must work.";
+    case "stepper-no-state":
+      return "Arrow through the stepper; expect 'Step 2 of N, current step' on the active step and 'completed' on finished ones.";
+    case "link-new-window":
+      return "Tab to the link; the announcement must include 'opens in a new tab' (or 'new window') before Enter is pressed.";
+    case "link-download-hint":
+      return "Tab to the link; the announcement must name the file type" + (ctx.info ? " ('" + ctx.info + "')" : "") + " and size, e.g. " + name + ", PDF, 2 MB, link.";
+    case "link-external-hint":
+      return "Tab to the link; the announcement must say 'external' (or the destination site) so the user knows they are leaving.";
+    case "link-as-button":
+      return ctx.info === "current" ? "Open the links list; the current breadcrumb/pagination item must not be listed as a link and must announce 'current page'."
+        : "Tab to the control; it must be announced as 'button' (or as a link with a real destination), never as 'same page link', and Enter must not scroll to the top.";
+    case "silent":
+      return "Trigger the update with a screen reader running; expect " + text + " announced without moving focus.";
+    case "risky":
+    case "live-late":
+      return "Reload the page, then trigger the update with NVDA and VoiceOver; " + text + " must be announced on the first try.";
+    case "rerender":
+      return "Trigger the refresh/route change with a screen reader running; expect a short summary announced and focus on the new heading.";
+    case "route-silent":
+      return "Navigate to the route with NVDA/VoiceOver running; expect the new page title (or a 'Navigated to …' status) announced and focus on the new heading.";
+    case "route-title-stale":
+      return "Navigate to the route; the browser tab title must change to the new page's name (Insert+T in NVDA reads it).";
+    case "route-h1-dup":
+      return "Navigate to the route and press H (or 1); the first heading must name this page/step, not the previous one.";
+    case "route-focus-stuck":
+      return "Navigate to the route, then press Tab once; focus must continue from the new page's heading, not from mid-page.";
+    case "transient":
+      return "Trigger the message with a screen reader running; it must be announced and stay on screen long enough to read.";
+    case "quiet":
+      return "Repeat the step with a screen reader running; a status must be announced within a few seconds.";
+    case "html-lang-missing":
+    case "html-lang-invalid":
+    case "html-lang-mismatch":
+      return "Reload with VoiceOver/NVDA; the page must be read with the " + (ctx.detected === "Arabic" || ctx.detected === "ar" ? "Arabic" : ctx.detected === "Latin" || ctx.detected === "latin" ? "English" : "correct") + " voice from the first line.";
+    case "html-dir":
+    case "dir":
+      return "Read a line with numbers and punctuation; the visual order must be correct for right-to-left text.";
+    case "text-mismatch":
+    case "lang-invalid":
+      return "Read the sentence with VoiceOver/NVDA; the voice must switch for " + snip + ".";
+    case "cmp-missing":
+      return "Open both language versions; the " + role + " must exist and be reachable on each.";
+    case "cmp-live":
+      return "Trigger the update on both language versions; it must be announced on each.";
+    case "cmp-unnamed":
+      return "Tab to the control on both language versions; each must announce a name in its own language.";
+    case "cmp-landmark":
+      return "Open the landmarks list on both language versions; the landmark must be named on each.";
+    case "cmp-headings":
+      return "Press H through both language versions; the heading structure must match.";
+    case "cmp-html-lang":
+    case "cmp-same-lang":
+      return "Reload each language version with a screen reader; each must be read with its own language voice.";
+    case "cmp-html-dir":
+      return "Check the Arabic version; numbers and punctuation must be laid out right-to-left.";
+    default:
+      return "Re-run the Screen reader tab check after the fix; the finding must no longer appear.";
+  }
+}
+
+var SR_SECTION_LABEL = { order: "Reading order", live: "Live regions", focus: "Focus trace", lang: "Language", journey: "Journey", cmp: "Bilingual comparison", ax: "Browser accessibility tree" };
+
+function srLevelOf(item) {
+  if (item.level) return item.level;
+  var first = item.issues && item.issues[0];
+  var m = first && /^(critical|serious|moderate|minor)\s*:/.exec(first);
+  return m ? m[1] : "moderate";
+}
+
+// A fence longer than any backtick run in the content, so page markup can't close the block.
+function mdFence(content) {
+  var longest = 0;
+  String(content || "").replace(/`+/g, function (m) { if (m.length > longest) longest = m.length; return m; });
+  return "`".repeat(Math.max(3, longest + 1));
+}
+
+function srShortMsg(msg) {
+  msg = String(msg || "").replace(/\s+/g, " ").trim();
+  var cut = msg.split(/ — |: /)[0];
+  if (cut.length < 12) cut = msg;
+  return cut.length > 90 ? cut.slice(0, 87) + "…" : cut;
+}
+
+function srTitle(section, item, msg) {
+  var who = item.role ? item.role + (item.name ? " \"" + String(item.name).slice(0, 40) + "\"" : "") : "";
+  return "[SR] " + srShortMsg(msg) + (who ? " — " + who : "") + (item.instances > 1 ? " (×" + item.instances + ")" : "");
+}
+
+// srFindings(srResults) -> flat list of ticket-ready findings from srResultsForExport():
+// { section, sectionLabel, code, level, title, msg, sel, html, role, name, instances, selectors, fix, verify }
+function srFindings(sr) {
+  if (!sr || typeof sr !== "object") return [];
+  var out = [];
+  var seen = {};
+  var strip = function (s) { return String(s || "").replace(/^(critical|serious|moderate|minor)\s*:\s*/, ""); };
+  var add = function (section, code, item, msg) {
+    var f = {
+      section: section, sectionLabel: SR_SECTION_LABEL[section] || section, code: code || "finding", level: srLevelOf(item),
+      msg: msg, sel: item.sel || "", html: item.html || "", role: item.role || "", name: item.name || "",
+      instances: item.instances || 1, selectors: item.selectors || (item.sel ? [item.sel] : []), fix: item.fix || null,
+    };
+    f.title = srTitle(section, item, msg);
+    f.verify = srVerifyStep(f.code, { name: item.name, role: item.role, text: item.text, sel: item.sel, snippet: item.snippet, declared: item.declared, detected: item.detected, attr: item.attr, info: item.info });
+    seen[f.code + "|" + f.sel] = true;
+    out.push(f);
+  };
+  var nodeList = function (section, items) {
+    (items || []).forEach(function (x) { add(section, x.code, x, (x.issues || []).map(strip).join("; ")); });
+  };
+  if (sr.readingOrder) nodeList("order", sr.readingOrder.issues);
+  if (sr.liveRegions) {
+    (sr.liveRegions.log || []).forEach(function (e) {
+      if (e.kind === "route") {
+        var rl = { "route-silent": "critical", "route-title-stale": "serious", "route-h1-dup": "moderate", "route-focus-stuck": "moderate" }[e.code];
+        if (rl && e.soft && e.level) rl = e.level; // query-only route change: graded minor by the monitor
+        if (!rl) return;
+        add("live", e.code, { level: rl, sel: e.sel, html: e.html, text: e.text, fix: e.fix, role: e.tag || "" }, "SPA navigation " + String(e.text || "").slice(0, 100) + (e.note ? " — " + e.note : ""));
+        return;
+      }
+      if (e.kind !== "silent" && e.kind !== "risky" && e.kind !== "rerender") return;
+      var isState = e.code === "state-not-announced";
+      var lvl = isState ? "serious" : e.kind === "silent" ? "critical" : e.kind === "risky" ? "serious" : "moderate";
+      var msg = (isState ? "state not announced (" + (e.attr || "aria state") + " missing): " : e.kind === "silent" ? "silent update: " : e.kind === "risky" ? "update may be missed: " : "large re-render not announced: ") + "\"" + String(e.text || "").slice(0, 80) + "\"" + (e.note ? " — " + e.note : "");
+      add("live", e.code || e.kind, { level: lvl, sel: e.sel, html: e.html, text: e.text, fix: e.fix, role: e.tag || "", attr: e.attr }, msg);
+    });
+  }
+  if (sr.focusTrace) nodeList("focus", sr.focusTrace.issues);
+  if (sr.language) (sr.language.issues || []).forEach(function (i) { add("lang", i.type, i, i.msg || i.type); });
+  if (sr.bilingual) (sr.bilingual.differences || []).forEach(function (d) { add("cmp", d.code, d, d.msg || d.kind); });
+  if (sr.journey) {
+    (sr.journey.gaps || []).forEach(function (g) {
+      if (seen[g.kind + "|" + (g.sel || "")] || (g.kind === "risky" && seen["live-late|" + (g.sel || "")])) return; // already reported from the focus trace / live log
+      add("journey", g.kind, { level: g.level, sel: g.sel }, g.msg + " (step " + (g.step + 1) + ", " + (g.t / 1000).toFixed(1) + "s, " + g.page + ")");
+    });
+  }
+  if (sr.browserTree) nodeList("ax", sr.browserTree.issues);
+  return out;
+}
+
+// ---------- Framework-aware screen reader snippets ----------
+// Rewrites the plain-HTML fix snippets produced by the Screen reader tab for
+// React (JSX) or Vue (SFC). "html" (or unknown) returns the snippet unchanged.
+// `code` is the screen reader issue code; a few codes (focus/modal/live-region
+// fixes) get a framework-specific example instead of a textual rewrite.
+
+var SR_REACT_EVENTS = { onclick: "onClick", onkeydown: "onKeyDown", onkeyup: "onKeyUp", onchange: "onChange", oninput: "onInput", onfocus: "onFocus", onblur: "onBlur", onsubmit: "onSubmit" };
+var SR_VOID_TAGS = "img|input|br|hr|meta|link|area|source|col|embed|track|wbr";
+
+function srReactEvent(name) {
+  name = name.toLowerCase();
+  return SR_REACT_EVENTS[name] || ("on" + name.charAt(2).toUpperCase() + name.slice(3));
+}
+
+function srToJsx(snippet) {
+  return snippet
+    .replace(/<!--([\s\S]*?)-->/g, function (_, c) { return "{/*" + c + "*/}"; })
+    .replace(/(\s)for="/g, "$1htmlFor=\"")
+    .replace(/(\s)class="/g, "$1className=\"")
+    .replace(/(\s)tabindex="(-?\d+)"/g, "$1tabIndex={$2}")
+    .replace(/\s(on[a-z]+)="([^"]*)"/g, function (_, ev, body) {
+      var js = body.replace(/\bthis\b/g, "e.currentTarget").replace(/\bevent\b/g, "e").replace(/'/g, '"');
+      return " " + srReactEvent(ev) + "={(e) => { " + js + " }}";
+    })
+    .replace(new RegExp("<(" + SR_VOID_TAGS + ")\\b([^>]*?)\\s*/?>", "gi"), "<$1$2 />");
+}
+
+function srToVue(snippet) {
+  var out = snippet.replace(/\s(on[a-z]+)="([^"]*)"/g, function (_, ev, body) {
+    var js = body.replace(/\bevent\b/g, function () { return "$event"; }).replace(/\bthis\b/g, function () { return "$event.currentTarget"; });
+    return " @" + ev.slice(2).toLowerCase() + '="' + js + '"';
+  });
+  var hints = [];
+  if (/\saria-label="/.test(out)) hints.push('<!-- dynamic text: :aria-label="labelText" -->');
+  if (/\s(aria-hidden="true"|hidden|inert)\b/.test(out)) hints.push("<!-- Vue: content that must be unreachable should be removed with v-if, not hidden with v-show / aria-hidden -->");
+  return hints.length ? out + "\n" + hints.join("\n") : out;
+}
+
+// href="#" / javascript: link that runs script -> <button>; current breadcrumb/pagination item -> aria-current, no href
+function srLinkAsButton(fw, opts) {
+  opts = opts || {};
+  var label = opts.name || "LINK_TEXT";
+  var click = fw === "react" ? "onClick={handleClick}" : "@click=\"handleClick\"";
+  var cls = fw === "react" ? "className" : "class";
+  if (opts.info === "current") {
+    return (fw === "react" ? "{/* the current page is not a link: aria-current, no href */}\n" : "<!-- the current page is not a link: aria-current, no href -->\n") +
+      "<span aria-current=\"page\">" + label + "</span>\n" +
+      (fw === "react" ? "{/* React Router: <NavLink to=\"/visa\"> sets aria-current=\"page\" for you on the active route */}" : "<!-- Vue Router: <router-link> adds aria-current=\"page\" on the active route automatically -->");
+  }
+  if (opts.info === "nav") {
+    return fw === "react"
+      ? "// router links carry a real URL — never href=\"#\" + onClick\n<Link to={`/services?page=${n}`}>" + label + "</Link>\n\n// no URL for this state: it is a button\n<button type=\"button\" " + click + ">" + label + "</button>"
+      : "<!-- router links carry a real URL — never href=\"#\" + @click -->\n<router-link :to=\"{ path: '/services', query: { page: n } }\">" + label + "</router-link>\n\n<!-- no URL for this state: it is a button -->\n<button type=\"button\" " + click + ">" + label + "</button>";
+  }
+  return "<button type=\"button\" " + cls + "=\"link-style\" " + click + ">" + label + "</button>\n" +
+    (fw === "react" ? "// no e.preventDefault() needed: a button does not navigate" : "<!-- no .prevent needed: a button does not navigate -->");
+}
+// target="_blank" without a hint -> reusable component that always appends the hidden text
+function srLinkNewWindow(fw, opts) {
+  opts = opts || {};
+  var label = opts.name || "LINK_TEXT";
+  if (fw === "react") {
+    return "function NewTabLink({ href, children }) {\n  return (\n    <a href={href} target=\"_blank\" rel=\"noopener noreferrer\">\n      {children}\n      <span className=\"visually-hidden\"> (opens in a new tab)</span>\n    </a>\n  );\n}\n\n<NewTabLink href=\"/feedback\">" + label + "</NewTabLink>";
+  }
+  return "<!-- NewTabLink.vue -->\n<template>\n  <a :href=\"href\" target=\"_blank\" rel=\"noopener noreferrer\">\n    <slot />\n    <span class=\"visually-hidden\"> (opens in a new tab)</span>\n  </a>\n</template>\n<script setup>defineProps({ href: String });</script>\n\n<NewTabLink href=\"/feedback\">" + label + "</NewTabLink>";
+}
+
+var SR_FRAMEWORK_SNIPPETS = {
+  react: {
+    "focus-lost": function () {
+      return "// decide where focus goes BEFORE the focused element unmounts\n" +
+        "const headingRef = useRef(null);            // <h2 ref={headingRef} tabIndex={-1}>LIST_TITLE</h2>\n" +
+        "const [items, setItems] = useState(list);\n\n" +
+        "function remove(id) {\n  const idx = items.findIndex((i) => i.id === id);\n  setItems(items.filter((i) => i.id !== id));\n  setFocusIndex(Math.min(idx, items.length - 2));   // next item, else previous\n}\n\n" +
+        "useEffect(() => {                              // runs after the DOM updated\n  const next = itemRefs.current[focusIndex];\n  (next ?? headingRef.current)?.focus();\n}, [items, focusIndex]);\n\n" +
+        "// closing a dialog/menu: return focus to the element that opened it\nuseEffect(() => { if (!open) openerRef.current?.focus(); }, [open]);";
+    },
+    "modal-escape": function () {
+      return "{/* native <dialog> traps focus and makes the page inert for you */}\n" +
+        "const dlgRef = useRef(null);\n" +
+        "useEffect(() => {\n  if (open) dlgRef.current?.showModal();   // not .show(), not display:block\n  else dlgRef.current?.close();\n}, [open]);\n\n" +
+        "<dialog ref={dlgRef} onClose={() => setOpen(false)}>…</dialog>\n\n" +
+        "{/* custom modal: render it through a portal outside <main> and make <main> inert while open */}\n" +
+        "useEffect(() => { document.querySelector(\"main\").inert = open; return () => openerRef.current?.focus(); }, [open]);";
+    },
+    "dialog-no-focus": function () {
+      return "const dlgRef = useRef(null);\n" +
+        "useEffect(() => { if (open) dlgRef.current?.showModal(); }, [open]);   // native <dialog>: focus moves inside automatically\n<dialog ref={dlgRef}>…</dialog>\n\n" +
+        "{/* custom dialog: focus the title once it is rendered */}\n" +
+        "const titleRef = useRef(null);\nuseEffect(() => { if (open) titleRef.current?.focus(); }, [open]);\n<h2 ref={titleRef} tabIndex={-1}>DIALOG_TITLE</h2>";
+    },
+    "silent": function (opts) { return srReactStatus(opts); },
+    "risky": function (opts) { return srReactStatus(opts); },
+    "live-late": function (opts) { return srReactStatus(opts); },
+    "route-silent": function () { return srReactRoute(true, true); },
+    "route-title-stale": function () { return srReactRoute(true, false); },
+    "route-h1-dup": function () { return "// React Router: one page-specific <h1> per route (the site name belongs in the title suffix)\nfunction ContactPage() {\n  return (\n    <main>\n      <h1 tabIndex={-1}>Contact</h1>          {/* not \"SITE_NAME\" on every page */}\n      …\n    </main>\n  );\n}\n\n// and keep document.title in step: useEffect(() => { document.title = \"Contact — SITE_NAME\"; }, []);"; },
+    "route-focus-stuck": function () { return srReactRoute(false, true); },
+    "link-as-button": function (opts) { return srLinkAsButton("react", opts); },
+    "link-new-window": function (opts) { return srLinkNewWindow("react", opts); },
+    "rerender": function () {
+      return "// after a route change or list refresh: announce a summary + move focus to the new heading\n" +
+        "const h1Ref = useRef(null);\n" +
+        "useEffect(() => {\n  setStatus(`${results.length} results for ${query}`);\n  h1Ref.current?.focus();\n}, [location.pathname, results]);\n\n" +
+        "<h1 ref={h1Ref} tabIndex={-1}>PAGE_TITLE</h1>\n<div role=\"status\" aria-live=\"polite\">{status}</div>";
+    }
+  },
+  vue: {
+    "focus-lost": function () {
+      return "<h2 ref=\"heading\" tabindex=\"-1\">LIST_TITLE</h2>\n<li v-for=\"item in items\" :key=\"item.id\" ref=\"rows\">…</li>\n\n" +
+        "// after removing the focused item, move focus deliberately (next item, else the heading)\n" +
+        "async remove(id) {\n  const idx = this.items.findIndex((i) => i.id === id);\n  this.items = this.items.filter((i) => i.id !== id);\n  await this.$nextTick();\n  const next = this.$refs.rows?.[Math.min(idx, this.items.length - 1)];\n  (next?.querySelector(\"button, a, input\") ?? this.$refs.heading).focus();\n}\n\n" +
+        "// closing a dialog/menu: return focus to the opener\nthis.$refs.opener.focus();";
+    },
+    "modal-escape": function () {
+      return "<!-- native <dialog> traps focus and makes the page inert for you -->\n" +
+        "<dialog ref=\"dlg\" @close=\"open = false\">…</dialog>\n\n" +
+        "watch: {\n  async open(v) {\n    await this.$nextTick();\n    v ? this.$refs.dlg.showModal() : this.$refs.dlg.close();   // not .show(), not v-show\n  }\n}\n\n" +
+        "<!-- custom modal: <Teleport to=\"body\"> the dialog and make <main> inert while it is open; on close this.$refs.opener.focus() -->\n" +
+        "document.querySelector(\"main\").inert = this.open;";
+    },
+    "dialog-no-focus": function () {
+      return "<dialog ref=\"dlg\">…</dialog>\n" +
+        "await this.$nextTick(); this.$refs.dlg.showModal();   // native <dialog>: focus moves inside automatically\n\n" +
+        "<!-- custom dialog: focus the title once it is rendered (v-if, then $nextTick) -->\n" +
+        "<h2 ref=\"title\" tabindex=\"-1\">DIALOG_TITLE</h2>\nawait this.$nextTick(); this.$refs.title.focus();";
+    },
+    "silent": function (opts) { return srVueStatus(opts); },
+    "risky": function (opts) { return srVueStatus(opts); },
+    "live-late": function (opts) { return srVueStatus(opts); },
+    "route-silent": function () { return srVueRoute(true, true); },
+    "route-title-stale": function () { return srVueRoute(true, false); },
+    "route-h1-dup": function () { return "<!-- Vue Router: one page-specific <h1> per route view (the site name belongs in the title suffix) -->\n<template>\n  <main>\n    <h1 tabindex=\"-1\">Contact</h1>   <!-- not \"SITE_NAME\" on every page -->\n    …\n  </main>\n</template>\n\n<!-- and keep the title in step: routes: [{ path: '/contact', component: Contact, meta: { title: 'Contact' } }] -->"; },
+    "route-focus-stuck": function () { return srVueRoute(false, true); },
+    "link-as-button": function (opts) { return srLinkAsButton("vue", opts); },
+    "link-new-window": function (opts) { return srLinkNewWindow("vue", opts); },
+    "rerender": function () {
+      return "<!-- after a route change or list refresh: announce a summary + move focus to the new heading -->\n" +
+        "<h1 ref=\"h1\" tabindex=\"-1\">PAGE_TITLE</h1>\n<div role=\"status\" aria-live=\"polite\">{{ status }}</div>\n\n" +
+        "watch(() => route.path, async () => {\n  status.value = `${results.value.length} results for ${query.value}`;\n  await nextTick();\n  h1.value.focus();\n});";
+    }
+  }
+};
+
+// React Router: title + focus + route announcer after every navigation.
+function srReactRoute(withTitle, withFocus) {
+  return "// React Router: run after EVERY navigation (App.jsx or a <RouteAnnouncer /> rendered once in the layout)\n" +
+    "import { useLocation } from \"react-router-dom\";\n" +
+    "const [announce, setAnnounce] = useState(\"\");\nconst location = useLocation();\n\n" +
+    "useEffect(() => {\n" +
+    "  const h1 = document.querySelector(\"main h1\");\n" +
+    "  const pageTitle = h1 ? h1.textContent.trim() : \"PAGE_TITLE\";\n" +
+    (withTitle ? "  document.title = `${pageTitle} — SITE_NAME`;              // tab title = first thing announced\n" : "") +
+    (withFocus ? "  if (h1) { h1.tabIndex = -1; h1.focus(); }                 // focus lands on the new page's heading\n" : "") +
+    "  setAnnounce(`Navigated to ${pageTitle}`);\n" +
+    "}, [location.pathname]);\n\n" +
+    "{/* rendered once in the layout, never unmounted between routes */}\n<div role=\"status\" aria-live=\"polite\" className=\"visually-hidden\">{announce}</div>";
+}
+// Vue Router: afterEach hook sets the title, focuses the H1 and fills a route announcer.
+function srVueRoute(withTitle, withFocus) {
+  return "<!-- App.vue: rendered once, never re-created between routes -->\n<div role=\"status\" aria-live=\"polite\" class=\"visually-hidden\">{{ announce }}</div>\n\n" +
+    "// router.js — runs after EVERY navigation\nrouter.afterEach(async (to) => {\n" +
+    "  const pageTitle = to.meta.title ?? \"PAGE_TITLE\";      // routes: [{ path: '/contact', meta: { title: 'Contact' } }]\n" +
+    (withTitle ? "  document.title = `${pageTitle} — SITE_NAME`;\n" : "") +
+    "  await nextTick();                                      // the new view is in the DOM now\n" +
+    (withFocus ? "  const h1 = document.querySelector(\"main h1\");\n  if (h1) { h1.tabIndex = -1; h1.focus(); }\n" : "") +
+    "  announce.value = `Navigated to ${pageTitle}`;\n});";
+}
+
+function srStatusText(opts) {
+  return String((opts && opts.text) || "MESSAGE").slice(0, 60).replace(/"/g, "'");
+}
+function srReactStatus(opts) {
+  return "{/* 1. keep ONE status region mounted with the page — render it empty, never conditionally */}\n" +
+    "const [status, setStatus] = useState(\"\");\n<div role=\"status\" aria-live=\"polite\">{status}</div>\n\n" +
+    "// 2. later, only change its text (errors that need immediate attention: role=\"alert\")\n" +
+    "setStatus(\"" + srStatusText(opts) + "\");";
+}
+function srVueStatus(opts) {
+  return "<!-- 1. keep ONE status region mounted with the page — no v-if on it -->\n" +
+    "<div role=\"status\" aria-live=\"polite\">{{ status }}</div>\n\n" +
+    "// 2. later, only change its text (errors that need immediate attention: role=\"alert\")\n" +
+    "this.status = \"" + srStatusText(opts) + "\";";
+}
+
+// frameworkizeSnippet(snippet, framework, code?, opts?) -> snippet string
+function frameworkizeSnippet(snippet, framework, code, opts) {
+  snippet = snippet == null ? "" : String(snippet);
+  framework = framework || "html";
+  if (framework !== "react" && framework !== "vue") return snippet;
+  var special = code && SR_FRAMEWORK_SNIPPETS[framework][code];
+  if (special) return special(opts || {});
+  if (!/<[a-zA-Z!]/.test(snippet)) return snippet; // pure JS/CSS: nothing to rewrite
+  return framework === "react" ? srToJsx(snippet) : srToVue(snippet);
+}
+
+const A11yFixes = { suggestFix, contrastFix, previewPatch, issuesMarkdown, frameworkizeSnippet, srVerifyStep, srFindings, DLS_COLORS };
 if (typeof module !== "undefined" && module.exports) module.exports = A11yFixes;
 if (typeof globalThis !== "undefined") globalThis.A11yFixes = A11yFixes;
 })();

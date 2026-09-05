@@ -7,7 +7,8 @@
   "scripts": {
     "a11y": "node a11y-ci.mjs",
     "a11y:baseline": "node a11y-ci.mjs --update-baseline",
-    "postinstall": "playwright install chromium"
+    "postinstall": "playwright install chromium",
+    "smoke": "node panel-smoke.mjs && node panel-smoke.mjs ar"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.10.0",

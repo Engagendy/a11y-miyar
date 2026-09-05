@@ -5,49 +5,121 @@
     <link rel="stylesheet" href="panel.css" />
   </head>
   <body>
-    <header>
+    <svg style="display:none" aria-hidden="true">
+      <defs>
+        <symbol id="i-play" viewBox="0 0 16 16"><path d="M5 3l8 5-8 5z"/></symbol>
+        <symbol id="i-record" viewBox="0 0 16 16"><circle cx="8" cy="8" r="4.5"/></symbol>
+        <symbol id="i-stop" viewBox="0 0 16 16"><rect x="4" y="4" width="8" height="8" rx="1"/></symbol>
+        <symbol id="i-export" viewBox="0 0 16 16"><path d="M8 10V2M5 5l3-3 3 3M3 9v4h10V9"/></symbol>
+        <symbol id="i-chevron" viewBox="0 0 16 16"><path d="M6 3l5 5-5 5"/></symbol>
+        <symbol id="i-sliders" viewBox="0 0 16 16"><path d="M2 4h12M2 8h12M2 12h12"/><circle cx="5" cy="4" r="1.5"/><circle cx="11" cy="8" r="1.5"/><circle cx="6" cy="12" r="1.5"/></symbol>
+        <symbol id="i-gear" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.5"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></symbol>
+        <symbol id="i-help" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M6 6.5a2 2 0 1 1 3 1.7c-.7.4-1 .8-1 1.5M8 12h.01"/></symbol>
+        <symbol id="i-reset" viewBox="0 0 16 16"><path d="M3 8a5 5 0 1 0 1.5-3.6M3 2.5v3h3"/></symbol>
+        <symbol id="i-target" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="2"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2"/></symbol>
+        <symbol id="i-bolt" viewBox="0 0 16 16"><path d="M9 1L3 9h5l-1 6 6-8H8z"/></symbol>
+        <symbol id="i-eraser" viewBox="0 0 16 16"><path d="M2 11l6-7 5 5-4 4H6zM5 13h9"/></symbol>
+        <symbol id="i-contrast" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 2a6 6 0 0 1 0 12z" fill="currentColor"/></symbol>
+        <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></symbol>
+        <symbol id="i-history" viewBox="0 0 16 16"><path d="M3 8a5 5 0 1 0 1.5-3.6M3 2.5v3h3M8 5v3l2 1.5"/></symbol>
+        <symbol id="i-grid" viewBox="0 0 16 16"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></symbol>
+        <symbol id="i-list" viewBox="0 0 16 16"><path d="M5 4h9M5 8h9M5 12h9M2 4h.01M2 8h.01M2 12h.01"/></symbol>
+        <symbol id="i-layout" viewBox="0 0 16 16"><rect x="2" y="2" width="12" height="12" rx="1"/><path d="M2 6h12M6 6v8"/></symbol>
+        <symbol id="i-clipboard" viewBox="0 0 16 16"><path d="M5 2.5h6v2H5zM5 3H4a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1h-1M6 8h4M6 11h4"/></symbol>
+        <symbol id="i-speaker" viewBox="0 0 16 16"><path d="M2 6h3l4-3v10l-4-3H2zM11 6a3 3 0 0 1 0 4M12.5 4a5.5 5.5 0 0 1 0 8"/></symbol>
+        <symbol id="i-bell" viewBox="0 0 16 16"><path d="M4 11V7a4 4 0 0 1 8 0v4l1 1H3zM6.5 14h3"/></symbol>
+        <symbol id="i-keyboard" viewBox="0 0 16 16"><rect x="1.5" y="4" width="13" height="8" rx="1"/><path d="M4 7h.01M7 7h.01M10 7h.01M12 7h.01M4.5 10h7"/></symbol>
+        <symbol id="i-globe" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M1.5 8h13M8 1.5c2.5 2.5 2.5 10.5 0 13M8 1.5c-2.5 2.5-2.5 10.5 0 13"/></symbol>
+        <symbol id="i-compare" viewBox="0 0 16 16"><path d="M6 3H2v10h4M10 3h4v10h-4M8 1v14"/></symbol>
+        <symbol id="i-tree" viewBox="0 0 16 16"><rect x="2" y="2" width="5" height="3.5" rx=".5"/><rect x="9" y="10.5" width="5" height="3.5" rx=".5"/><path d="M4.5 5.5v6.5h4.5"/></symbol>
+        <symbol id="i-film" viewBox="0 0 16 16"><rect x="2" y="2" width="12" height="12" rx="1"/><path d="M2 5h12M2 11h12M5 2v12M11 2v12"/></symbol>
+        <symbol id="i-copy" viewBox="0 0 16 16"><rect x="5" y="5" width="9" height="9" rx="1"/><path d="M11 5V3a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h2"/></symbol>
+        <symbol id="i-inspect" viewBox="0 0 16 16"><path d="M2 2h5M2 2v5M9 9l5 5M9 13V9h4"/></symbol>
+        <symbol id="i-sparkle" viewBox="0 0 16 16"><path d="M8 2l1.5 4.5L14 8l-4.5 1.5L8 14l-1.5-4.5L2 8l4.5-1.5z"/></symbol>
+        <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></symbol>
+        <symbol id="i-external" viewBox="0 0 16 16"><path d="M7 3H3v10h10V9M9 2h5v5M14 2L7 9"/></symbol>
+        <symbol id="i-check" viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7"/></symbol>
+        <symbol id="i-x" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></symbol>
+        <symbol id="i-minus" viewBox="0 0 16 16"><path d="M3 8h10"/></symbol>
+        <symbol id="i-square" viewBox="0 0 16 16"><rect x="3" y="3" width="10" height="10" rx="1"/></symbol>
+        <symbol id="i-warn" viewBox="0 0 16 16"><path d="M8 2l6.5 11.5h-13zM8 6.5v3M8 12h.01"/></symbol>
+        <symbol id="i-rows" viewBox="0 0 16 16"><path d="M2 3h12M2 6.5h12M2 10h12M2 13.5h12"/></symbol>
+        <symbol id="i-pipette" viewBox="0 0 16 16"><path d="M10 2l4 4-1.5 1.5-4-4zM9.5 4.5L3 11v2h2l6.5-6.5"/></symbol>
+        <symbol id="i-pin" viewBox="0 0 16 16"><path d="M8 14v-4M5 10h6l-1-3V4h1V2H5v2h1v3z"/></symbol>
+        <symbol id="i-wand" viewBox="0 0 16 16"><path d="M2 14l8-8M10 6l2-2M12 1.5v1.5M14.5 4H13M11 2.5l.5.5M13.5 6l.5.5"/></symbol>
+        <symbol id="i-undo" viewBox="0 0 16 16"><path d="M3 6h7a3 3 0 0 1 0 6H6M3 6l3-3M3 6l3 3"/></symbol>
+        <symbol id="i-file" viewBox="0 0 16 16"><path d="M4 1.5h5l4 4v9H4zM9 1.5v4h4"/></symbol>
+        <symbol id="i-ticket" viewBox="0 0 16 16"><path d="M2 4h12v3a1.5 1.5 0 0 0 0 2v3H2V9a1.5 1.5 0 0 0 0-2zM6 4v8"/></symbol>
+      </defs>
+    </svg>
+
+    <header id="topbar">
       <select id="modeSelect" title="What to audit">
         <option value="a11y" selected>Accessibility</option>
         <option value="both">Accessibility + DLS</option>
         <option value="dls">DLS only</option>
       </select>
-      <button id="scanBtn">▶ Scan this page</button>
-      <button id="flowBtn" title="Record a user flow: navigate and interact while A11y Miyar scans every step and aggregates unique findings">⏺ Record flow</button>
-      <button id="helpBtn" class="help-btn" title="Help — what every feature does, with examples">?</button>
-      <button id="optionsBtn" class="help-btn" title="Open extension options (defaults, language, AI key)">⚙</button>
-      <select id="levelSelect" title="Which rule set to run">
-        <option value="all">All rules</option>
-        <option value="wcag22aa" selected>WCAG 2.2 AA</option>
-        <option value="wcag21aa">WCAG 2.1 AA</option>
-        <option value="wcag2aa">WCAG 2.0 AA</option>
-        <option value="wcag2a">WCAG 2.0 A</option>
-      </select>
-      <label class="check"><input type="checkbox" id="bestPractice" /> best practices</label>
-      <label class="check" title="Contrast fixes suggest the nearest passing UAE DLS palette token (e.g. aegold-600 → aegold-700) instead of a free color"><input type="checkbox" id="dlsContrastChk" /> DLS colors</label>
-      <span class="row-break"></span>
-      <button id="highlightAllBtn" title="Outline every violating element, color-coded by severity" hidden>◉ Highlight all</button>
-      <button id="autofixBtn" title="Apply every machine-fixable patch to the live page (temporary — reload restores the original; your source still needs the real edits)" hidden>⚡ Auto-fix page</button>
-      <button id="clearBtn" title="Remove highlights from the page">✕ Clear highlights</button>
-      <button id="resetBtn" title="Clear highlights and all results — start fresh">↺ Reset</button>
-      <button id="contrastToggle" title="Color contrast checker">◐ Contrast</button>
-      <span id="status"></span>
+      <button id="scanBtn" class="btn primary">Scan page</button>
+      <button id="flowBtn" class="btn" title="Record a user flow: navigate and interact while A11y Miyar scans every step and aggregates unique findings">Record flow</button>
       <span class="spacer"></span>
-      <span id="exportGroup" hidden>
-        Export:
-        <button class="export" data-format="json">JSON</button>
-        <button class="export" data-format="csv">CSV</button>
-        <button class="export" data-format="html">HTML</button>
-        <button class="export" data-format="pdf">PDF</button>
-        <button class="export" data-format="issues">Issues</button>
-        <button class="export" data-format="jira">Jira</button>
-        <button class="export" data-format="azure">Azure</button>
-      </span>
+      <details class="menu" id="exportGroup" hidden>
+        <summary class="btn" id="exportBtn">Export</summary>
+        <div class="menu-list" role="menu">
+          <div class="menu-group" id="exportFilesHead">Files</div>
+          <button class="export" data-format="json" role="menuitem">JSON</button>
+          <button class="export" data-format="csv" role="menuitem">CSV</button>
+          <button class="export" data-format="html" role="menuitem">HTML</button>
+          <button class="export" data-format="pdf" role="menuitem">PDF</button>
+          <div class="menu-group" id="exportTicketsHead">Tickets</div>
+          <button class="export" data-format="issues" role="menuitem">Issues</button>
+          <button class="export" data-format="jira" role="menuitem">Jira</button>
+          <button class="export" data-format="azure" role="menuitem">Azure</button>
+        </div>
+      </details>
+      <details class="popover" id="scanSettings">
+        <summary class="btn" id="settingsBtn" title="Scan settings">Scan settings</summary>
+        <div class="popover-body">
+          <div class="lbl-block" id="presetRow" role="group" aria-labelledby="presetLbl"><span class="lbl" id="presetLbl">Preset</span>
+            <div class="preset-btns">
+              <button type="button" class="btn preset" id="presetRecommended" data-preset="recommended" aria-pressed="false">Recommended</button>
+              <button type="button" class="btn preset" id="presetStrict" data-preset="strict" aria-pressed="false">Strict WCAG only</button>
+              <button type="button" class="btn preset" id="presetAll" data-preset="all" aria-pressed="false">Everything</button>
+            </div>
+            <span class="preset-hint" id="presetHint"></span>
+          </div>
+          <label class="lbl-block" for="levelSelect"><span class="lbl" id="ruleSetLbl">Rule set</span>
+            <select id="levelSelect" title="Which rule set to run">
+              <option value="all">All rules</option>
+              <option value="wcag22aa" selected>WCAG 2.2 AA</option>
+              <option value="wcag21aa">WCAG 2.1 AA</option>
+              <option value="wcag2aa">WCAG 2.0 AA</option>
+              <option value="wcag2a">WCAG 2.0 A</option>
+            </select>
+          </label>
+          <div class="lbl-block"><span class="lbl" id="alsoRunLbl">Also run</span>
+            <label class="check" id="bestPracticeLbl"><input type="checkbox" id="bestPractice" /> <span class="lbl">best practices</span></label>
+            <label class="check" id="srRulesLbl" title="Also run axe's experimental screen-reader rules: label-content-name-mismatch (WCAG 2.5.3), p-as-heading, table-fake-caption, td-has-header, focus-order-semantics"><input type="checkbox" id="srRulesChk" /> <span class="lbl">SR rules</span></label>
+            <label class="check" id="dlsContrastLbl" title="Contrast fixes suggest the nearest passing UAE DLS palette token (e.g. aegold-600 → aegold-700) instead of a free color"><input type="checkbox" id="dlsContrastChk" /> <span class="lbl">DLS colors</span></label>
+          </div>
+          <a href="#" id="openOptionsLink" class="popover-link">More in Options</a>
+        </div>
+      </details>
+      <button id="contrastToggle" class="icon-btn" title="Color contrast checker"></button>
+      <button id="densityBtn" class="icon-btn" title="Compact rows" aria-pressed="false"></button>
+      <button id="resetBtn" class="icon-btn" title="Clear highlights and all results — start fresh"></button>
+      <button id="optionsBtn" class="icon-btn" title="Open extension options (defaults, language, AI key)"></button>
+      <button id="helpBtn" class="icon-btn" title="Help — what every feature does, with examples"></button>
     </header>
 
+    <div id="statusBar">
+      <span id="status"></span>
+      <div id="stale" class="stale" hidden>⚠ The page has changed since the last scan — results may be stale. Re-scan to refresh.</div>
+    </div>
+
     <div id="contrastBar" hidden>
-      <button id="pickFg">⧉ Pick text color</button>
+      <button id="pickFg" class="btn">Pick text color</button>
       <span class="swatch" id="fgSwatch"></span><code id="fgHex">#000000</code>
-      <button id="pickBg">⧉ Pick background</button>
+      <button id="pickBg" class="btn">Pick background</button>
       <span class="swatch" id="bgSwatch"></span><code id="bgHex">#ffffff</code>
       <span id="ratio" class="ratio">21.00 : 1</span>
       <span id="contrastVerdicts"></span>
@@ -56,60 +128,275 @@
       </span>
     </div>
 
-    <div id="stale" class="stale" hidden>⚠ The page has changed since the last scan — results may be stale. Re-scan to refresh.</div>
-
     <nav id="tabs">
-      <button data-view="auto" class="active">Automated</button>
-      <button data-view="dls">🇦🇪 DLS</button>
-      <button data-view="manual">🧭 Manual tests <span id="manualProgress"></span></button>
-      <button data-view="help">❓ Help</button>
+      <button data-view="overview" class="active"><svg class="ic" aria-hidden="true"><use href="#i-grid"/></svg><span class="lbl">Overview</span><span class="tab-badge" hidden></span></button>
+      <button data-view="auto"><svg class="ic" aria-hidden="true"><use href="#i-list"/></svg><span class="lbl">Automated</span><span class="tab-badge" hidden></span></button>
+      <button data-view="dls"><svg class="ic" aria-hidden="true"><use href="#i-layout"/></svg><span class="lbl">DLS</span><span class="tab-badge" hidden></span></button>
+      <button data-view="manual"><svg class="ic" aria-hidden="true"><use href="#i-clipboard"/></svg><span class="lbl">Manual tests</span><span id="manualProgress" class="tab-badge" hidden></span></button>
+      <button data-view="sr"><svg class="ic" aria-hidden="true"><use href="#i-speaker"/></svg><span class="lbl">Screen reader</span></button>
+      <button data-view="help"><svg class="ic" aria-hidden="true"><use href="#i-help"/></svg><span class="lbl">Help</span></button>
     </nav>
 
-    <main id="auto">
-    <div id="summary" hidden>
-      <span class="pill critical" id="countCritical">0 critical</span>
-      <span class="pill serious" id="countSerious">0 serious</span>
-      <span class="pill moderate" id="countModerate">0 moderate</span>
-      <span class="pill minor" id="countMinor">0 minor</span>
-      <span class="pill passes" id="countPasses">0 passed</span>
-      <span id="diff" class="diff"></span>
-    </div>
-
-    <details id="historySection" hidden open>
-      <summary class="section-summary">📈 History</summary>
-      <div id="historyWrap">
-        <canvas id="historyChart" height="72"></canvas>
-        <div id="historyLegend"></div>
+    <main id="overview">
+      <div id="ovHero" data-state="idle">
+        <div class="empty-state">
+          <svg class="ic lg" aria-hidden="true"><use href="#i-play"/></svg>
+          <h2 class="empty-title" id="ovHeroTitle"></h2>
+          <p class="empty" id="ovHeroText"></p>
+        </div>
+        <div class="ov-bar">
+          <code id="ovUrl" dir="ltr"></code>
+          <span id="ovTime"></span>
+          <span class="spacer"></span>
+        </div>
+        <button id="runAllBtn" class="btn primary"></button>
       </div>
-    </details>
-
-    <details id="resultsSection" open>
-      <summary class="section-summary" id="resultsSummaryLabel">🔎 Findings</summary>
-      <div id="filterRow" hidden>
-        <input id="filterInput" type="text" placeholder="🔍 Filter by rule, impact, or selector…" />
-        <span id="filterCount"></span>
+      <div id="ovCards" class="ov-grid">
+      <div class="ov-card" data-audit="auto" data-state="idle" tabindex="0" role="button">
+        <div class="ov-head"><svg class="ic" aria-hidden="true"><use href="#i-list"/></svg><span class="ov-title"></span><span class="ov-state"></span></div>
+        <div class="ov-body"></div>
+        <div class="ov-actions"><button class="btn outline" id="ovRunAuto"></button><a class="ov-view" href="#"></a></div>
       </div>
+      <div class="ov-card" data-audit="dls" data-state="idle" tabindex="0" role="button">
+        <div class="ov-head"><svg class="ic" aria-hidden="true"><use href="#i-layout"/></svg><span class="ov-title"></span><span class="ov-state"></span></div>
+        <div class="ov-body"></div>
+        <div class="ov-actions"><button class="btn outline" id="ovRunDls"></button><a class="ov-view" href="#"></a></div>
+      </div>
+      <div class="ov-card" data-audit="sr" data-state="idle" tabindex="0" role="button">
+        <div class="ov-head"><svg class="ic" aria-hidden="true"><use href="#i-speaker"/></svg><span class="ov-title"></span><span class="ov-state"></span></div>
+        <div class="ov-body"></div>
+        <div class="ov-actions"><button class="btn outline" id="ovRunSr"></button><a class="ov-view" href="#"></a></div>
+      </div>
+      <div class="ov-card" data-audit="manual" data-state="idle" tabindex="0" role="button">
+        <div class="ov-head"><svg class="ic" aria-hidden="true"><use href="#i-clipboard"/></svg><span class="ov-title"></span><span class="ov-state"></span></div>
+        <div class="ov-body"></div>
+        <div class="ov-actions"><button class="btn outline" id="ovRunManual"></button><a class="ov-view" href="#"></a></div>
+      </div>
+      </div>
+      <section id="ovTop">
+        <h3 class="section-title" id="ovTopTitle"></h3>
+        <ol class="top-list" id="ovTopList"></ol>
+      </section>
+    </main>
+
+    <main id="auto" hidden>
+      <div class="view-toolbar" id="autoToolbar">
+        <div id="filterRow" class="filter-row" hidden>
+          <label class="input-wrap" for="filterInput"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg><input id="filterInput" type="text" placeholder="Filter by rule, impact, or selector…" /></label>
+          <span id="filterCount" class="filter-count"></span>
+        </div>
+        <span class="spacer"></span>
+        <button id="highlightAllBtn" class="btn" title="Outline every violating element, color-coded by severity" hidden>Highlight all</button>
+        <button id="autofixBtn" class="btn" title="Apply every machine-fixable patch to the live page (temporary — reload restores the original; your source still needs the real edits)" hidden>Auto-fix page</button>
+        <button id="clearBtn" class="btn" title="Remove highlights from the page" hidden>Clear highlights</button>
+      </div>
+      <div id="summary" hidden>
+        <button class="pill critical" id="countCritical" data-impact="critical" aria-pressed="true">0 critical</button>
+        <button class="pill serious" id="countSerious" data-impact="serious" aria-pressed="true">0 serious</button>
+        <button class="pill moderate" id="countModerate" data-impact="moderate" aria-pressed="true">0 moderate</button>
+        <button class="pill minor" id="countMinor" data-impact="minor" aria-pressed="true">0 minor</button>
+        <span class="pill passes" id="countPasses">0 passed</span>
+        <span id="diff" class="diff"></span>
+      </div>
+
+      <details id="historySection" hidden>
+        <summary class="section-summary">History</summary>
+        <div id="historyWrap">
+          <canvas id="historyChart" height="72"></canvas>
+          <div id="historyLegend"></div>
+        </div>
+      </details>
+
       <div id="results">
-        <p class="empty">Click <b>Scan this page</b> to run an axe-core audit on the inspected page.</p>
+        <div class="empty-state">
+          <svg class="ic lg" aria-hidden="true"><use href="#i-search"/></svg>
+          <h2 class="empty-title">No scan yet</h2>
+          <p class="empty">Click Scan page to run an axe-core audit on the inspected page.</p>
+          <button id="emptyScanBtn" class="btn primary">Scan page</button>
+        </div>
       </div>
-    </details>
     </main>
 
     <main id="dlsView" hidden>
-      <p class="empty" id="dlsIntro">Audit this page against the UAE Design System (AEGov DLS v3 — mandated for federal government entities).</p>
-      <button id="dlsBtn">🇦🇪 Run DLS check</button>
+      <div class="view-toolbar" id="dlsToolbar">
+        <button id="dlsBtn" class="btn primary dls">Run DLS check</button>
+        <span id="dlsScoreLine" class="score-line"></span>
+        <div id="dlsFilterRow" class="filter-row" hidden>
+          <label class="input-wrap" for="dlsFilterInput"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg><input id="dlsFilterInput" type="text" placeholder="Filter by check, verdict, detail or selector…" /></label>
+          <span id="dlsFilterCount" class="filter-count"></span>
+        </div>
+        <span class="spacer"></span>
+        <button id="dlsHighlightAllBtn" class="btn" title="Outline every DLS gap on the page (gold dashed)" hidden>Highlight all gaps</button>
+        <button id="dlsClearBtn" class="btn" title="Remove highlights from the page" hidden>Clear highlights</button>
+      </div>
+      <div id="dlsEmpty" class="empty-state">
+        <svg class="ic lg" aria-hidden="true"><use href="#i-layout"/></svg>
+        <h2 class="empty-title" id="dlsEmptyTitle">No DLS check yet</h2>
+        <p class="empty" id="dlsIntro">Audit this page against the UAE Design System (AEGov DLS v3 — mandated for federal government entities).</p>
+        <button id="dlsEmptyRun" class="btn primary dls">Run DLS check</button>
+      </div>
       <div id="dlsReport" hidden></div>
     </main>
 
     <main id="manual" hidden>
-      <p class="empty">Automated checks cover only ~30–50% of WCAG. These guided walkthroughs
+      <div class="view-toolbar" id="manualToolbar">
+        <button id="manualNextBtn" class="btn primary">Start next test</button>
+        <span id="manualBar"><progress max="10" value="0"></progress><span class="lbl" id="manualDoneLbl">0/10 done</span></span>
+        <div id="manualFilterRow" class="filter-row">
+          <label class="input-wrap" for="manualFilterInput"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg><input id="manualFilterInput" type="text" placeholder="Filter by title, WCAG ref, question or finding…" /></label>
+          <span id="manualFilterCount" class="filter-count"></span>
+        </div>
+        <span class="spacer"></span>
+        <span class="mf-chips" role="group" id="manualFilters">
+          <button class="pill mf untested" id="mfUntested" data-verdict="untested" aria-pressed="true">untested</button>
+          <button class="pill mf pass" id="mfPass" data-verdict="pass" aria-pressed="true">pass</button>
+          <button class="pill mf fail" id="mfFail" data-verdict="fail" aria-pressed="true">fail</button>
+          <button class="pill mf na" id="mfNa" data-verdict="na" aria-pressed="true">N/A</button>
+        </span>
+      </div>
+      <p class="empty" id="manualIntro">Automated checks cover only ~30–50% of WCAG. These guided walkthroughs
       cover what machines can't judge. Mark each one Pass / Fail / N-A — verdicts are saved
       per URL and included in exports.</p>
       <div id="manualList"></div>
     </main>
 
+    <main id="srView" hidden>
+      <div class="view-toolbar" id="srToolbar">
+        <button id="srRunAllBtn" class="btn primary">Run all checks</button>
+        <label class="check"><input type="checkbox" id="srIssuesOnly" checked /> <span class="lbl">issues only</span></label>
+        <div id="srFilterRow" class="filter-row">
+          <label class="input-wrap" for="srFilterInput"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg><input id="srFilterInput" type="text" placeholder="Filter by role, name, message, selector or code…" /></label>
+          <span id="srFilterCount" class="filter-count"></span>
+        </div>
+        <button id="srAddFindingsBtn" class="btn" hidden>Add issues to Manual test</button>
+        <span class="spacer"></span>
+      </div>
+      <p class="empty" id="srIntro">What a screen reader actually receives: the announced reading order, live-region announcements, every focus move, and language/voice switching — the bug classes a static scan cannot see.</p>
+
+      <details class="sr-section sr-journey" id="srJourneySection" open hidden>
+        <summary class="section-summary">Journey transcript</summary>
+        <div class="sr-toolbar">
+          <button id="srJourneyCopyBtn" class="btn">Copy transcript</button>
+          <span id="srJourneyStats" class="sr-stats"></span>
+        </div>
+        <div id="srJourneyList"></div>
+      </details>
+
+      <div id="srScoreCard" class="sr-score" hidden></div>
+
+      <ol id="srSteps" class="steps">
+        <li class="step" data-step="1" data-state="idle">
+          <details class="sr-section" id="srOrderSection" open>
+            <summary class="section-summary step-summary">
+              <span class="step-num">1</span>
+              <svg class="ic i-chevron" aria-hidden="true"><use href="#i-chevron"/></svg>
+              <span class="step-title"></span>
+              <span class="step-state"></span>
+              <span class="spacer"></span>
+              <span class="step-actions"><button id="srBuildBtn" class="btn"></button></span>
+            </summary>
+            <div class="sr-toolbar">
+              <button id="srPlayBtn" class="btn sr-speech" title="Read the rows below aloud, top to bottom">Play page</button>
+              <label class="check sr-speech sr-rate" title="Speech rate"><span id="srRateLabel">rate</span> <input type="range" id="srRate" min="0.8" max="2" step="0.1" value="1" /> <span id="srRateVal">1.0×</span></label>
+              <span id="srOrderStats" class="sr-stats"></span>
+            </div>
+            <div id="srOrderList"></div>
+          </details>
+        </li>
+        <li class="step" data-step="2" data-state="idle">
+          <details class="sr-section" id="srLiveSection">
+            <summary class="section-summary step-summary">
+              <span class="step-num">2</span>
+              <svg class="ic i-chevron" aria-hidden="true"><use href="#i-chevron"/></svg>
+              <span class="step-title"></span>
+              <span class="step-state"></span>
+              <span class="spacer"></span>
+              <span class="step-actions"><button id="srLiveBtn" class="btn"></button></span>
+            </summary>
+            <div class="sr-toolbar">
+              <button id="srLiveClearBtn" class="btn">Clear log</button>
+              <span id="srLiveStats" class="sr-stats"></span>
+            </div>
+            <div id="srLiveRegions" class="sr-regions"></div>
+            <div id="srLiveLog"></div>
+          </details>
+        </li>
+        <li class="step" data-step="3" data-state="idle">
+          <details class="sr-section" id="srFocusSection">
+            <summary class="section-summary step-summary">
+              <span class="step-num">3</span>
+              <svg class="ic i-chevron" aria-hidden="true"><use href="#i-chevron"/></svg>
+              <span class="step-title"></span>
+              <span class="step-state"></span>
+              <span class="spacer"></span>
+              <span class="step-actions"><button id="srFocusBtn" class="btn"></button></span>
+            </summary>
+            <div class="sr-toolbar">
+              <button id="srWalkBtn" class="btn" title="Move focus through every Tab stop automatically and report unreachable stops, order jumps and trap candidates">Auto-walk</button>
+              <button id="srFocusClearBtn" class="btn">Clear log</button>
+              <label class="check"><input type="checkbox" id="srFocusIssuesOnly" /> <span class="lbl">issues only</span></label>
+              <span id="srFocusStats" class="sr-stats"></span>
+            </div>
+            <div id="srWalkSummary" class="sr-walk-summary" hidden></div>
+            <div id="srFocusLog"></div>
+          </details>
+        </li>
+        <li class="step" data-step="4" data-state="idle">
+          <details class="sr-section" id="srLangSection">
+            <summary class="section-summary step-summary">
+              <span class="step-num">4</span>
+              <svg class="ic i-chevron" aria-hidden="true"><use href="#i-chevron"/></svg>
+              <span class="step-title"></span>
+              <span class="step-state"></span>
+              <span class="spacer"></span>
+              <span class="step-actions"><button id="srLangBtn" class="btn"></button></span>
+            </summary>
+            <div class="sr-toolbar">
+              <span id="srLangStats" class="sr-stats"></span>
+            </div>
+            <div id="srLangList"></div>
+          </details>
+        </li>
+        <li class="step" data-step="5" data-state="idle">
+          <details class="sr-section" id="srCmpSection">
+            <summary class="section-summary step-summary">
+              <span class="step-num">5</span>
+              <svg class="ic i-chevron" aria-hidden="true"><use href="#i-chevron"/></svg>
+              <span class="step-title"></span>
+              <span class="step-state"></span><span class="step-opt"></span>
+              <span class="spacer"></span>
+              <span class="step-actions"><button id="srCmpBtn" class="btn"></button></span>
+            </summary>
+            <div class="sr-toolbar">
+              <input type="url" id="srCmpUrl" class="sr-cmp-url" placeholder="https://…/ar/ — URL of the other-language version" />
+              <span id="srCmpStats" class="sr-stats"></span>
+            </div>
+            <p class="empty" id="srCmpNote">Loads the other-language page in a hidden tab and diffs the two accessibility trees: controls, names, landmark labels, live regions and heading levels present on one side only, plus html lang/dir on each side.</p>
+            <div id="srCmpList"></div>
+          </details>
+        </li>
+        <li class="step" data-step="6" data-state="idle">
+          <details class="sr-section" id="srAxSection">
+            <summary class="section-summary step-summary">
+              <span class="step-num">6</span>
+              <svg class="ic i-chevron" aria-hidden="true"><use href="#i-chevron"/></svg>
+              <span class="step-title"></span>
+              <span class="step-state"></span><span class="step-opt"></span>
+              <span class="spacer"></span>
+              <span class="step-actions"><button id="srAxBtn" class="btn"></button></span>
+            </summary>
+            <div class="sr-toolbar">
+              <span id="srAxStats" class="sr-stats"></span>
+            </div>
+            <p class="empty" id="srAxNote">Reads the tree the browser hands to NVDA/VoiceOver through the DevTools protocol — the ground truth when the reading order above and the real screen reader disagree. Needs the debugger permission (Options → Screen reader checks); Chrome shows a "debugging" bar for about a second.</p>
+            <div id="srAxList"></div>
+          </details>
+        </li>
+      </ol>
+    </main>
+
     <main id="help" hidden>
-      <p class="empty">Every A11y Miyar feature, what it's for, and a concrete example of when it helps.</p>
+      <p class="empty" id="helpIntro">Every A11y Miyar feature, what it's for, and a concrete example of when it helps.</p>
       <div id="helpList"></div>
     </main>
 

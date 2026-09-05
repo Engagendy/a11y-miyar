@@ -8,6 +8,7 @@
     body { font-family: sans-serif; margin: 40px; }
     .low-contrast { color: #bbb; background: #fff; }
     .fake-button { color: blue; cursor: pointer; }
+    .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   </style>
 </head>
 <body>
@@ -26,8 +27,9 @@
   <!-- Link with no discernible text -->
   <a href="https://example.com"></a>
 
-  <!-- Heading order skip: h1 missing, starts at h3 -->
+  <!-- Heading order skip: h1 missing, starts at h3; h3 → h5 skips a level (axe heading-order, best practice — on by default) -->
   <h3>Section heading (page has no h1)</h3>
+  <h5>Skipped heading level (h3 → h5)</h5>
 
   <!-- div acting as a button with no role/tabindex -->
   <div class="fake-button" onclick="alert('hi')">Click me (fake button)</div>
@@ -41,6 +43,133 @@
     <tr><td>Name</td><td>Age</td></tr>
     <tr><td>Ali</td><td>30</td></tr>
   </table>
+
+  <!-- ===== Screen reader tab fixtures ===== -->
+  <h3>Screen reader fixtures</h3>
+  <!-- generic link names, duplicated, different destinations -->
+  <div class="aegov-card"><p><a href="/a">Read more</a> · <a href="/b">Read more</a> · <a href="/c">click here</a></p></div>
+  <!-- aria-label that does not contain the visible text (WCAG 2.5.3) -->
+  <button aria-label="Submit form">Send</button>
+  <!-- focusable div with no role -->
+  <div tabindex="0" onclick="alert('x')">Open settings (div with tabindex, no role)</div>
+  <!-- aria-hidden container that still contains a focusable link -->
+  <div aria-hidden="true"><a href="/hidden">Hidden but focusable link</a></div>
+  <!-- title-only name on an icon button -->
+  <button title="Close">×</button>
+  <!-- Arabic text with no lang, then Latin text inside lang="ar", then a correct span -->
+  <p>مرحباً بكم في البوابة الرسمية للخدمات الحكومية</p>
+  <p lang="ar">هذه فقرة عربية تحتوي على Ministry of Human Resources and Emiratisation بلا وسم لغة</p>
+  <p lang="ar">فقرة صحيحة مع <span lang="en">Ministry of Human Resources</span> موسوم بشكل صحيح</p>
+  <!-- silent update vs live region vs role=alert -->
+  <button id="silentBtn" onclick="document.getElementById('silentOut').textContent='Saved (silently)'">Save silently</button>
+  <span id="silentOut"></span>
+  <button id="liveBtn" onclick="document.getElementById('liveOut').textContent='Saved (announced)'">Save with live region</button>
+  <span id="liveOut" role="status"></span>
+  <button onclick="var d=document.createElement('div');d.setAttribute('aria-live','polite');d.textContent='Created with content — may be missed';document.body.appendChild(d)">Create live region with content</button>
+  <!-- focus loss: removing the focused element -->
+  <button onclick="this.remove()">Delete me (focus falls to body)</button>
+  <!-- modal that does not trap focus -->
+  <button onclick="document.getElementById('dlg').showModal()">Open modal</button>
+  <dialog id="dlg"><p>Modal without proper trap</p><button onclick="document.getElementById('dlg').close()">Close</button></dialog>
+
+  <!-- ===== Missing state on custom controls (board gaps) ===== -->
+  <h3>Custom-control state fixtures</h3>
+  <!-- fake tab strip: "active" class only, no aria-selected -->
+  <div role="tablist" id="fakeTabs">
+    <button role="tab" class="tab active" id="tabA" onclick="pickTab(this)">Personal</button>
+    <button role="tab" class="tab" id="tabB" onclick="pickTab(this)">Company</button>
+  </div>
+  <!-- team card that toggles .selected on click, no aria-pressed -->
+  <div class="team-card" id="teamCard" role="button" tabindex="0" onclick="this.classList.toggle('selected')">Team Alpha</div>
+  <!-- "Select all" toggle whose state lives in class "active" -->
+  <button id="selectAll" class="btn active" onclick="this.classList.toggle('active')">Select all</button>
+  <!-- expander without aria-expanded: shows/hides the next sibling -->
+  <button id="expander" onclick="var p=document.getElementById('expBody');p.hidden=!p.hidden">More filters</button>
+  <div id="expBody" hidden><p>Advanced filter options appear here.</p></div>
+  <!-- required asterisk, but the input has neither required nor aria-required -->
+  <div class="field"><label for="emiratesId">Emirates ID <span class="req">*</span></label> <input type="text" id="emiratesId" /></div>
+  <!-- editable date field announced "read only" -->
+  <div class="field"><label for="dob">Date of birth</label> <input type="text" id="dob" class="datepicker" readonly placeholder="DD/MM/YYYY" /><button type="button" class="icon-calendar" aria-label="Open calendar"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="11"/></svg></button></div>
+  <!-- stepper: tick icon + active/done classes, no aria-current, no hidden step text -->
+  <ol class="stepper" id="wizardSteps">
+    <li class="done"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8l3 3 7-7"/></svg> Details</li>
+    <li class="active">Documents</li>
+    <li>Review</li>
+  </ol>
+  <!-- must stay clean: Tailwind variant / design-token classes are not state; native summary exposes expanded itself -->
+  <button id="twBtn" class="px-4 active:bg-blue-800 hover:bg-blue-700 text-on-primary">Save</button>
+  <details><summary id="sumTw" class="open:font-bold">Details (native)</summary><p>Native disclosure.</p></details>
+  <!-- must stay clean: a password mask is not a required marker; a footnote "*" after the form is not either -->
+  <input type="password" id="pwMask" class="pw-mask" placeholder="********" />
+  <div id="nl"><h4>Newsletter</h4><form><label for="nlEmail">Email</label> <input type="email" id="nlEmail" /></form><p>* We never share your email</p></div>
+  <!-- must stay clean: a display-only readonly date (no picker) -->
+  <div class="field"><label for="createdDate">Created date</label> <input type="text" id="createdDate" name="created_date" readonly value="2024-01-01" /></div>
+  <!-- must stay clean: instructional "how it works" list with a decorative icon on every item -->
+  <ol class="steps" id="howSteps">
+    <li><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6"/></svg> Register</li>
+    <li><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6"/></svg> Apply</li>
+    <li><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6"/></svg> Receive</li>
+  </ol>
+  <!-- a Search button whose results box appears is not a disclosure (no aria-expanded advice) -->
+  <button id="searchBtn" onclick="document.getElementById('searchRes').hidden=false">Search</button>
+  <div id="searchRes" hidden>3 results</div>
+  <script>function pickTab(b) { for (var t of b.parentNode.children) t.classList.toggle("active", t === b); }</script>
+
+  <!-- ===== Link behaviour (board gaps): new tab / download / external without a hint, href="#" links acting as buttons ===== -->
+  <h3>Link behaviour fixtures</h3>
+  <p>
+    <a id="feedbackLink" href="/feedback" target="_blank">Customer feedback</a> ·
+    <a id="feedbackOk" href="/feedback" target="_blank">Customer feedback form <span class="visually-hidden">(opens in a new tab)</span></a> ·
+    <a id="reportPdf" href="/files/annual-report.pdf">Annual report</a> ·
+    <a id="reportOk" href="/files/annual-report.pdf">Annual report 2025 (PDF, 2 MB)</a> ·
+    <a id="csvDl" class="csv" href="/export?format=csv" download="employees.csv">Export employees</a> ·
+    <a id="extLink" href="https://www.wam.ae/">WAM news agency</a> ·
+    <a id="extOk" href="https://www.wam.ae/">WAM <span class="visually-hidden">(external link)</span></a> ·
+    <a id="anchorTop" href="#top">Back to top</a> ·
+    <a id="backTop" href="#">Back to top (bare #)</a> ·
+    <a id="badHref" href="/files/report%.pdf">Broken percent-encoding</a> ·
+    <a id="subLink" href="https://eservices.wam.ae/">e-Services (subdomain)</a> ·
+    <a id="roleBtnLink" href="#" role="button" onclick="return false">Role button link (fine)</a>
+  </p>
+  <form><button id="printBtn" type="submit" formtarget="_blank">Print version</button></form>
+  <nav aria-label="Breadcrumb" class="breadcrumb"><ol>
+    <li><a id="crumbHome" class="crumb-link" href="#">Home</a></li>
+    <li><a href="/services">Services</a></li>
+    <li class="active"><a id="crumbCurrent" class="crumb-current" href="#">Visa renewal</a></li>
+  </ol></nav>
+  <nav aria-label="Pagination" class="pagination">
+    <a id="page1" class="page-link active" href="#">1</a>
+    <a id="page2" class="page-link" href="#" onclick="return false">2</a>
+    <a id="pageNext" class="page-next" href="javascript:void(0)">Next</a>
+  </nav>
+  <a id="toggleLink" class="toggle-link" href="#" onclick="document.getElementById('expBody').hidden=false;return false">Show filters (link as button)</a>
+
+  <!-- fake SPA (hash router): "Services" re-renders silently — same title, same H1, focus stays on the
+       button; "Contact" sets document.title, renders a page-specific H1, focuses it and announces the change -->
+  <div id="spaNav">
+    <button id="spaBad" onclick="spaGo('/services')">SPA: go to Services (silent)</button>
+    <button id="spaGood" onclick="spaGo('/contact')">SPA: go to Contact (announced)</button>
+    <!-- query-only change (sort/filter): same title and H1 are correct, only the silence is noted (minor) -->
+    <button id="sortBtn" onclick="history.replaceState(null, '', location.pathname + '?sort=name'); document.getElementById('app').innerHTML = '<h1>Home</h1><p>Sorted by name.</p>'">Sort by name</button>
+    <!-- in-page anchor: not a route change at all -->
+    <a id="inPageLink" href="#spaNav">Jump to SPA demo</a>
+  </div>
+  <div id="app"><h1>Home</h1><p>Welcome to the single-page demo. Use the buttons above to change route.</p></div>
+  <div id="spaAnnouncer" role="status" aria-live="polite"></div>
+  <script>
+    function spaGo(route) {
+      history.pushState({ route: route }, "", "#" + route);
+      var app = document.getElementById("app");
+      if (route === "/services") {
+        app.innerHTML = "<h1>Home</h1><p>Services: passports, visas, licences. This content replaced the previous page without any announcement.</p>";
+      } else {
+        document.title = "Contact — SPA demo";
+        app.innerHTML = "<h1 tabindex=\"-1\">Contact</h1><p>Call centre 800-60 or email info@example.gov.ae.</p>";
+        app.querySelector("h1").focus();
+        document.getElementById("spaAnnouncer").textContent = "Navigated to Contact";
+      }
+    }
+  </script>
 
   <!-- Iframe with violations inside (tests cross-frame scanning) -->
   <iframe title="embedded test frame" style="margin-top:20px;width:400px;height:120px"

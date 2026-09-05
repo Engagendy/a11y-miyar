@@ -10,16 +10,21 @@ const DLS_DATA = {"version":"3.0.7","colors":{"#f9f7ed":"aegold-50","#f2eccf":"a
 
 /* ---------- functions injected into the inspected page ---------- */
 
-function runAxeInPage(runOnlyArg) {
+function runAxeInPage(runOnlyArg, rulesArg) {
   const options = { resultTypes: ["violations", "passes"] };
   if (runOnlyArg) options.runOnly = runOnlyArg;
+  // Per-rule enable overrides tag filtering (axe ruleShouldRun) — used for the
+  // screen-reader experimental rules that axe ships disabled by default.
+  if (rulesArg && Object.keys(rulesArg).length) options.rules = rulesArg;
   return window.axe.run(document, options).then((r) => ({
     url: location.href,
+    title: document.title,
     frames: document.querySelectorAll("iframe").length,
     passes: r.passes.length,
     violations: r.violations.map((v) => ({
       id: v.id,
       impact: v.impact || "minor",
+      tags: (v.tags || []).filter((tg) => tg === "best-practice" || tg === "experimental"),
       help: v.help,
       description: v.description,
       helpUrl: v.helpUrl,
@@ -1083,9 +1088,1458 @@ function dlsComponentAuditInPage(data) {
   return rows;
 }
 
+/* ---------- screen reader instrumentation (injected into the page) ---------- */
+
+// Reading-order view: what a screen reader would announce, node by node, using
+// axe-core's own accessible-name / role computation (axe must be injected first).
+function srTreeInPage() {
+  const axe = window.axe;
+  if (!axe || !axe.commons) return { error: "axe-core not loaded" };
+  const cssPath = (el) => {
+    const parts = [];
+    let cur = el;
+    for (let depth = 0; cur && cur.nodeType === 1 && depth < 6; depth++) {
+      if (cur.id) { parts.unshift("#" + CSS.escape(cur.id)); break; }
+      const tag = cur.tagName.toLowerCase();
+      if (tag === "body" || tag === "html") { parts.unshift(tag); break; }
+      const parent = cur.parentElement;
+      if (!parent) {
+        // shadow root boundary — prefix with the host path
+        const root = cur.getRootNode && cur.getRootNode();
+        if (root && root.host) return cssPath(root.host) + " >>> " + [tag, ...parts].join(" > ");
+        parts.unshift(tag);
+        break;
+      }
+      const idx = [...parent.children].indexOf(cur) + 1;
+      parts.unshift(`${tag}:nth-child(${idx})`);
+      cur = parent;
+    }
+    return parts.join(" > ");
+  };
+  const T = axe.commons.text, A = axe.commons.aria, D = axe.commons.dom;
+  const INTERACTIVE = new Set(["link", "button", "checkbox", "radio", "textbox", "combobox", "listbox",
+    "menuitem", "menuitemcheckbox", "menuitemradio", "option", "slider", "spinbutton", "switch", "tab",
+    "searchbox", "treeitem", "scrollbar"]);
+  const NAME_FROM_CONTENT = new Set(["link", "button", "heading", "cell", "columnheader", "rowheader",
+    "gridcell", "option", "tab", "menuitem", "menuitemcheckbox", "menuitemradio", "treeitem", "tooltip",
+    "switch", "checkbox", "radio"]);
+  const LANDMARK = new Set(["banner", "navigation", "main", "complementary", "contentinfo", "search",
+    "region", "form"]);
+  const CONTAINER = new Set(["list", "table", "grid", "dialog", "alertdialog", "tablist", "menu", "menubar",
+    "tree", "radiogroup", "group", "toolbar", "listbox", "combobox", "article", "figure", "alert", "status",
+    "log", "marquee", "timer", "row", "rowgroup", "listitem", "separator", "img", "progressbar", "meter",
+    "note", "definition", "term", "blockquote", "code", "caption", "table", "presentation", "none"]);
+  const GENERIC = /^(click here|here|more|read more|learn more|details|link|button|image|icon|submit|go|see more|view more|click|»|›|→|>)$/i;
+  // Live region: explicit aria-live (not "off") or an implicitly live role — used by the bilingual comparison.
+  const liveOf = (el, role) => { const v = (el.getAttribute("aria-live") || "").toLowerCase(); return (!!v && v !== "off") || /^(status|alert|log|marquee|timer)$/.test(role); };
+  const TEXT_ROLES = new Set([null, undefined, "generic", "paragraph", "text", "strong", "emphasis",
+    "superscript", "subscript", "time", "deletion", "insertion", "mark", "suggestion"]);
+
+  let ok = true;
+  try { axe.setup(document); } catch (_) { ok = false; }
+  if (!ok) return { error: "axe.setup failed" };
+
+  const rows = [];
+  const issuesTotal = { count: 0 };
+  const linkNames = new Map();   // "role|name" -> [{idx, href}]
+  const landmarkNames = new Map(); // role -> [{idx, name}]
+  const stateOf = (el, role) => {
+    const s = [];
+    const a = (n) => el.getAttribute(n);
+    if (a("aria-expanded")) s.push("expanded=" + a("aria-expanded"));
+    if (a("aria-pressed")) s.push("pressed=" + a("aria-pressed"));
+    if (a("aria-selected")) s.push("selected=" + a("aria-selected"));
+    if (a("aria-current")) s.push("current=" + a("aria-current"));
+    if (a("aria-haspopup")) s.push("haspopup=" + a("aria-haspopup"));
+    if (a("aria-checked")) s.push("checked=" + a("aria-checked"));
+    else if ("checked" in el && (el.type === "checkbox" || el.type === "radio")) s.push(el.checked ? "checked" : "not checked");
+    if (el.disabled || a("aria-disabled") === "true") s.push("disabled");
+    if (el.required || a("aria-required") === "true") s.push("required");
+    if (a("aria-invalid") && a("aria-invalid") !== "false") s.push("invalid");
+    if (el.readOnly || a("aria-readonly") === "true") s.push("readonly");
+    if (role === "heading") {
+      const lvl = a("aria-level") || (/^H[1-6]$/.test(el.tagName) ? el.tagName[1] : "2");
+      s.push("level " + lvl);
+    }
+    if (a("aria-describedby")) s.push("has description");
+    return s;
+  };
+  const visibleText = (el) => (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim();
+  // ---- custom-control state heuristics (cards/tabs/steppers that keep their state in a class only) ----
+  const clsStr = (el) => (el.getAttribute && el.getAttribute("class")) || "";
+  // Whole class tokens only (is-active, selected, tab--open) — not Tailwind variants (active:bg-blue-800) or design tokens (text-on-primary).
+  const STATE_TOKEN_RE = /^(is-|has-)?(active|selected|checked|on|current|expanded|open)$|--(active|selected|checked|current|expanded|open)$/i;
+  const stateWord = (el) => clsStr(el).split(/\s+/).find((c) => STATE_TOKEN_RE.test(c)) || "";
+  const STATE_ATTRS = ["aria-pressed", "aria-selected", "aria-checked", "aria-expanded", "aria-current"];
+  const hasStateAttr = (el) => STATE_ATTRS.some((n) => el.hasAttribute(n));
+  // The attribute that should carry the state for this role / class vocabulary.
+  const stateAttrFor = (el, role) => {
+    const cls = clsStr(el);
+    if (role === "tab" || role === "option") return "aria-selected";
+    if (/^(checkbox|menuitemcheckbox|switch)$/.test(role)) return "aria-checked";
+    const w = stateWord(el);
+    if (/(expanded|open)$/i.test(w) || el.hasAttribute("aria-controls")) return "aria-expanded";
+    if (/current$/i.test(w)) return "aria-current";
+    return "aria-pressed";
+  };
+  // A single "*" (not a run like a password mask "********") or the word; text AFTER the field only counts with the word / a lone "*".
+  const REQ_RE = /(?<!\*)\*(?!\*)|\brequired\b|\bmandatory\b|مطلوب|إلزامي|إجباري/i;
+  const REQ_AFTER_RE = /^\*$|\brequired\b|\bmandatory\b|مطلوب|إلزامي|إجباري/i;
+  const textBefore = (container, el) => { try { const r = document.createRange(); r.setStart(container, 0); r.setEndBefore(el); return r.toString().replace(/\s+/g, " ").trim(); } catch (_) { return ""; } };
+  const fieldsIn = (el) => el.querySelectorAll("input:not([type='hidden']),select,textarea,[role='textbox'],[role='combobox']").length;
+  // Visible "*" / "required" next to a field that exposes neither required nor aria-required.
+  const requiredIssue = (el, role, tag, name) => {
+    const isField = /^(textbox|searchbox|combobox|spinbutton|listbox|slider)$/.test(role) || /^(input|select|textarea)$/.test(tag);
+    if (!isField || el.required || el.getAttribute("aria-required") === "true") return null;
+    if (tag === "input" && /^(hidden|submit|button|reset|image|checkbox|radio)$/.test(el.type || "")) return null;
+    const placeholder = (el.getAttribute("placeholder") || "").trim();
+    const texts = [name && name !== placeholder ? name : ""]; // a name that is just the placeholder ("********") is not a marker
+    for (const l of el.labels || []) texts.push(visibleText(l));
+    const sib = (n) => (n && n.nodeType === 1 ? visibleText(n) : n && n.nodeType === 3 ? n.data : "");
+    texts.push(sib(el.previousSibling), sib(el.previousElementSibling));
+    const after = [sib(el.nextSibling), sib(el.nextElementSibling)];
+    const p = el.parentElement;
+    if (p && p !== document.body && fieldsIn(p) === 1) { texts.push(textBefore(p, el)); const gp = p.parentElement; if (gp && gp !== document.body && fieldsIn(gp) === 1) texts.push(textBefore(gp, el)); }
+    const hit = texts.map((x) => (x || "").trim()).find((x) => x && x.length <= 200 && REQ_RE.test(x))
+      || after.map((x) => (x || "").trim()).find((x) => x && x.length <= 200 && REQ_AFTER_RE.test(x));
+    if (!hit) return null;
+    const m = hit.match(REQ_RE);
+    return { level: "moderate", code: "required-not-exposed", msgKey: "srMsgRequired", msgArgs: [m ? m[0] : "*"], msg: `marked required visually ("${m ? m[0] : "*"}") but has neither required nor aria-required — announced as an optional field` };
+  };
+  // readonly / aria-readonly on a field that is part of a picker (date, time, combobox) — the user IS expected to change it.
+  const readonlyIssue = (el, role, tag) => {
+    if (!(el.readOnly || el.getAttribute("aria-readonly") === "true")) return null;
+    if (!(tag === "input" || role === "textbox" || role === "combobox" || role === "searchbox")) return null;
+    const ICON_RE = /calendar|clock|date|time|picker|schedule|event/i;
+    // A real picker signal: picker class / placeholder mask / date-time input type — not an id or name that merely contains "date" (created_date is display-only).
+    const own = /picker|flatpickr|daterange|pikaday|datetime/i.test(clsStr(el) + " " + (el.getAttribute("placeholder") || "")) || /^(date|time|datetime-local|month|week)$/.test(el.type || "");
+    const ICON_SEL = "button,[role='button'],svg,img,i,span[class*='icon']";
+    const near = [el.previousElementSibling, el.nextElementSibling, el.parentElement && el.parentElement.querySelector(ICON_SEL)];
+    const iconBtn = near.some((b) => b && b.nodeType === 1 && b.matches(ICON_SEL) && (ICON_RE.test(clsStr(b) + " " + (b.getAttribute("aria-label") || "") + " " + (b.getAttribute("title") || "")) || ICON_RE.test((b.innerHTML || "").slice(0, 400))));
+    if (!(el.hasAttribute("aria-haspopup") || el.hasAttribute("aria-controls") || role === "combobox" || own || iconBtn)) return null;
+    return { level: "moderate", code: "readonly-misuse", msgKey: "srMsgReadonly", msg: "readonly on a picker field (date/time/combobox) — announced as \"read only\" although the user is expected to change its value; screen reader users skip it or think it is locked" };
+  };
+  // Stepper / wizard / progress list whose steps show state with icons or classes only (no aria-current, no hidden step text).
+  const STEPPER_RE = /\b(step|steps|stepper|wizard|progress)[\w-]*/i;
+  const stepperIssue = (el, tag, role) => {
+    const isList = /^(ol|ul|nav)$/.test(tag) || role === "list" || role === "navigation";
+    const named = STEPPER_RE.test(clsStr(el) + " " + (el.id || "") + " " + (el.getAttribute("aria-label") || ""));
+    if (!named || !(isList || tag === "div")) return null;
+    let items = [...el.children].filter((c) => c.nodeType === 1);
+    if (items.length < 2 && items[0] && /^(ol|ul)$/i.test(items[0].tagName)) items = [...items[0].children];
+    items = items.filter((i) => !/^(script|style|template)$/i.test(i.tagName));
+    if (items.length < 2 || items.length > 30) return null;
+    // State signal: a state class on an item, a check/tick/done icon, or icons on SOME items only (an icon on every item is decoration, as in "how it works" lists).
+    const withClass = items.filter((i) => /\b(active|done|completed|complete|current|finished|visited|passed|is-active|is-done)\b/i.test(clsStr(i))).length;
+    const withCheck = items.filter((i) => i.querySelector("[class*='check'],[class*='tick'],[class*='done'],[class*='complete']")).length;
+    const withIcon = items.filter((i) => i.querySelector("svg,img,i,[class*='icon']")).length;
+    const stateful = withClass || withCheck || (withIcon > 0 && withIcon < items.length);
+    if (!stateful) return null;
+    if (el.querySelector("[aria-current]")) return null;
+    const hiddenText = [...el.querySelectorAll("[class*='sr-only'],[class*='visually-hidden'],[class*='visuallyhidden'],[class*='screen-reader']")].some((x) => /step|complete|done|current|خطوة|مكتمل|الحالي/i.test(x.textContent));
+    if (hiddenText) return null;
+    return { level: "moderate", code: "stepper-no-state", msgKey: "srMsgStepper", msgArgs: [items.length], msg: `stepper with ${items.length} steps shows progress with icons/classes only — no aria-current="step" and no hidden "Step N of ${items.length}, completed" text, so the screen reader reads a plain list` };
+  };
+  // ---- link behaviour: new tab / download / external without a hint; href="#" or javascript: links acting as buttons ----
+  const NEW_WIN_RE = /new (tab|window)|opens in|نافذة جديدة|تبويب جديد|علامة تبويب جديدة/i;
+  const EXT_RE = /external|خارجي|opens/i;
+  const DL_EXT_RE = /\.(pdf|docx?|xlsx?|pptx?|zip|rar|7z|csv)$/i;
+  const HIDDEN_SEL = "[class*='sr-only'],[class*='visually-hidden'],[class*='visuallyhidden'],[class*='screen-reader']";
+  // Everything a screen reader could say for the link: name, title, aria-describedby targets and visually-hidden text inside it.
+  const linkHint = (el, name) => {
+    const parts = [name, el.getAttribute("title") || ""];
+    for (const id of (el.getAttribute("aria-describedby") || "").split(/\s+/)) { const d = id && document.getElementById(id); if (d) parts.push(d.textContent); }
+    for (const h of el.querySelectorAll(HIDDEN_SEL)) parts.push(h.textContent);
+    return parts.join(" ").replace(/\s+/g, " ");
+  };
+  const NAV_SEL = "[class*='pagination'],[class*='pager'],[class*='breadcrumb'],[aria-label*='pagination' i],[aria-label*='breadcrumb' i],[aria-label*='pages' i]";
+  const linkIssues = (el, role, tag, name) => {
+    const out = [];
+    const isLink = role === "link", isFormBtn = role === "button" && tag === "button" && el.hasAttribute("formtarget");
+    if (!isLink && !isFormBtn) return out;
+    const href = (el.getAttribute("href") || "").trim();
+    const target = (isFormBtn ? el.getAttribute("formtarget") : el.getAttribute("target") || "").trim().toLowerCase();
+    const hint = linkHint(el, name);
+    if (target === "_blank" && !NEW_WIN_RE.test(hint)) {
+      out.push({ level: "moderate", code: "link-new-window", msgKey: "srMsgLinkNewWindow", msgArgs: [isFormBtn, name || role, role], msg: `opens in a new ${isFormBtn ? "window (formtarget)" : "tab"} without saying so — the screen reader announces "${name || role}, ${role}" and the user is stranded in a tab they did not expect (WCAG 3.2.5)` });
+    }
+    if (!isLink) return out;
+    let url = null;
+    try { url = new URL(href, location.href); } catch (_) { url = null; }
+    let pathname = url ? url.pathname || "" : href.split(/[?#]/)[0];
+    try { pathname = decodeURIComponent(pathname); } catch (_) {} // malformed %-escapes must not abort the whole scan
+    const ext = (pathname.match(DL_EXT_RE) || [])[1];
+    if (ext || el.hasAttribute("download")) {
+      const type = (ext || (el.getAttribute("download") || "").split(".").pop() || "file").toUpperCase();
+      const typeRe = new RegExp(`\\b${type}\\b|download|\\b[0-9.,]+ ?(kb|mb|gb|كيلوبايت|ميغابايت)\\b|تحميل|تنزيل`, "i");
+      if (!typeRe.test(hint)) out.push({ level: "moderate", code: "link-download-hint", info: type, msgKey: "srMsgLinkDownload", msgArgs: [type, name || "link"], msg: `downloads a ${type} file but the name does not say so — announced as "${name || "link"}, link" with no file type or size (WCAG 2.4.4)` });
+    }
+    // Registrable domain (mohre.gov.ae, example.co.uk): eservices.mohre.gov.ae is the same site as www.mohre.gov.ae.
+    const site = (h) => { const p = (h || "").toLowerCase().replace(/:\d+$/, "").split("."); if (p.length <= 2) return p.join("."); const n = p[p.length - 2].length <= 2 || /^(com|net|org|gov|edu|ac|co)$/.test(p[p.length - 2]) ? 3 : 2; return p.slice(-n).join("."); };
+    if (url && /^https?:$/.test(url.protocol) && site(url.host) && site(url.host) !== site(location.host) && !EXT_RE.test(hint)) {
+      out.push({ level: "minor", code: "link-external-hint", info: url.host, msgKey: "srMsgLinkExternal", msgArgs: [url.host], msg: `leaves the site for ${url.host} without a hint — nothing in the name says it is an external link` });
+    }
+    if (tag === "a" && el.hasAttribute("href") && (href === "" || href === "#" || /^javascript:/i.test(href))) {
+      const li = el.closest("li");
+      const nav = el.closest(NAV_SEL);
+      const current = el.hasAttribute("aria-current") || /\b(active|current|selected)\b/i.test(clsStr(el)) || (li && /\b(active|current|selected)\b/i.test(clsStr(li)));
+      // "pointer": no inline handler but a framework/toggle attribute or a button-ish class says a script runs. A bare <a href="#">Back to top</a> is a legitimate same-page link.
+      const scripted = [...el.attributes].some((x) => /^(data-(bs-)?toggle|data-target|data-bs-target|data-action|data-on-?click|ng-click|@click|v-on:click|x-on:click|\(click\)|hx-(get|post|trigger))$/i.test(x.name)) ||
+        /\b(btn|button|toggle|trigger|dropdown|accordion|collapse|expand|tab)\b/i.test(clsStr(el) + " " + (el.id || ""));
+      const kind = nav && current ? "current" : nav ? "nav" : el.hasAttribute("onclick") || /^javascript:/i.test(href) ? "handler" : scripted ? "pointer" : "";
+      if (!kind) return out;
+      const crumb = nav && /breadcrumb/i.test(nav.className + " " + (nav.getAttribute("aria-label") || ""));
+      const what = href === "" ? 'href=""' : href === "#" ? 'href="#"' : "javascript: href";
+      const msg = kind === "current" ? `${what} on the current ${/breadcrumb/i.test(nav.className + " " + (nav.getAttribute("aria-label") || "")) ? "breadcrumb" : "pagination"} item — announced as "same page link" though it goes nowhere; the screen reader never hears "current page"`
+        : kind === "nav" ? `${what} inside a ${/breadcrumb/i.test(nav.className + " " + (nav.getAttribute("aria-label") || "")) ? "breadcrumb" : "pagination"} — announced as "same page link" and Enter jumps to the top of the page instead of navigating`
+        : `${what} with a click handler — announced as "same page link", not a button, and Enter scrolls to the top before the script runs`;
+      out.push({ level: "serious", code: "link-as-button", info: kind, msgKey: kind === "current" ? "srMsgLinkAsBtnCurrent" : kind === "nav" ? "srMsgLinkAsBtnNav" : "srMsgLinkAsBtnHandler", msgArgs: [what, crumb], msg });
+    }
+    return out;
+  };
+  // Primary language subtag of the closest [lang] ancestor (falls back to <html lang>) — picks the speech voice in the panel.
+  const primaryLang = (v) => (v || "").trim().split(/[-_]/)[0].toLowerCase();
+  const pageLang = primaryLang(document.documentElement.getAttribute("lang"));
+  const langOf = (el) => { const l = el.closest && el.closest("[lang]"); return (l && primaryLang(l.getAttribute("lang"))) || pageLang; };
+  // Markup shape for component-level grouping in the panel: sorted class list + nearest UAE DLS (aegov-*) class of self/ancestors.
+  const clsOf = (el) => [...(el.classList || [])].filter((c) => !/^__a11y_lens/.test(c)).sort().join(" ");
+  const componentOf = (el) => {
+    for (let cur = el; cur && cur.nodeType === 1; cur = cur.parentElement) {
+      for (const c of cur.classList || []) if (c.startsWith("aegov-")) return c;
+    }
+    return "";
+  };
+
+  const walk = (vnode, depth) => {
+    if (rows.length >= 900) return;
+    const el = vnode.actualNode;
+    if (!el || el.nodeType !== 1) return;
+    const tag = el.tagName.toLowerCase();
+    if (/^(script|style|noscript|template|meta|link|head)$/.test(tag)) return;
+    if (el.classList && el.classList.contains("__a11y_lens_overlay")) return;
+
+    let srVisible = true;
+    try { srVisible = D.isVisibleToScreenReaders(vnode); } catch (_) {}
+    if (!srVisible) {
+      // aria-hidden / display:none subtree: flag anything still reachable by Tab
+      if (el.getAttribute("aria-hidden") === "true") {
+        const focusables = [];
+        const scan = (vn) => {
+          if (focusables.length >= 5) return;
+          try { if (D.isInTabOrder(vn)) focusables.push(vn.actualNode); } catch (_) {}
+          for (const c of vn.children || []) scan(c);
+        };
+        scan(vnode);
+        if (focusables.length) {
+          rows.push({
+            sel: cssPath(el), tag, role: "aria-hidden", name: "", states: [], depth, lang: langOf(el), cls: clsOf(el), component: componentOf(el),
+            html: el.outerHTML.slice(0, 160), hidden: true,
+            issues: [{ level: "serious", code: "hidden-focusable", msg: `aria-hidden subtree still contains ${focusables.length} Tab-reachable element(s) — keyboard users land on something screen readers cannot see` }],
+          });
+          issuesTotal.count++;
+        }
+      }
+      return;
+    }
+
+    let role = null;
+    try { role = A.getRole(vnode); } catch (_) { role = el.getAttribute("role") || null; }
+    let name = "";
+    const meaningful = role && !TEXT_ROLES.has(role) && role !== "presentation" && role !== "none";
+    if (meaningful) {
+      let fullNameLen = 0;
+      try { name = T.accessibleTextVirtual(vnode).replace(/\s+/g, " ").trim(); } catch (_) { name = ""; }
+      fullNameLen = name.length;
+      name = name.slice(0, 400); // cap what is spoken / stored / exported; the long-name check uses the real length
+      const issues = [];
+      const isInteractive = INTERACTIVE.has(role);
+      const ariaLabel = (el.getAttribute("aria-label") || "").trim();
+      const hasLabelledby = !!el.getAttribute("aria-labelledby");
+      const title = (el.getAttribute("title") || "").trim();
+      const placeholder = (el.getAttribute("placeholder") || "").trim();
+
+      if (isInteractive && !name) {
+        issues.push({ level: "critical", code: "no-name", msg: `${role} has no accessible name — announced as just "${role}"` });
+      } else if (role === "img" && !name) {
+        issues.push({ level: "serious", code: "img-no-name", msg: "image has no accessible name — announced as 'image' or the file name" });
+      } else if (role === "heading" && !name) {
+        issues.push({ level: "serious", code: "empty-heading", msg: "empty heading — announced as 'heading' with nothing after it" });
+      } else if ((role === "link" || role === "button") && GENERIC.test(name)) {
+        issues.push({ level: "serious", code: "generic-name", msg: `generic name "${name}" — meaningless out of context (screen reader users often list all links/buttons)` });
+      }
+      if (name && placeholder && !ariaLabel && !hasLabelledby && name === placeholder &&
+          /^(textbox|searchbox|combobox|spinbutton)$/.test(role) && !el.labels?.length) {
+        issues.push({ level: "serious", code: "placeholder-only", msg: "named by placeholder only — the name disappears once the user types; add a <label> or aria-label" });
+      }
+      if (name && title && !ariaLabel && !hasLabelledby && name === title && isInteractive &&
+          !visibleText(el) && !(el.labels && el.labels.length) && !el.getAttribute("alt")) {
+        issues.push({ level: "moderate", code: "title-only", msg: "named by title attribute only — unreliable on touch and in some screen readers" });
+      }
+      if (ariaLabel && isInteractive) {
+        const vis = visibleText(el).toLowerCase();
+        if (vis && vis.length <= 80 && !name.toLowerCase().includes(vis)) {
+          issues.push({ level: "serious", code: "label-in-name", msg: `accessible name "${name}" does not contain the visible text "${vis}" — voice-control users cannot say what they see (WCAG 2.5.3)` });
+        }
+      }
+      if (fullNameLen > 150 && (role === "link" || role === "button")) {
+        issues.push({ level: "minor", code: "long-name", msg: `very long name (${fullNameLen} chars) — announced in full on every focus` });
+      }
+      if (isInteractive) {
+        let inTab = false;
+        try { inTab = D.isInTabOrder(vnode); } catch (_) {}
+        let focusable = false;
+        try { focusable = D.isFocusable(vnode); } catch (_) {}
+        if (!focusable && !/^(option|menuitem|menuitemcheckbox|menuitemradio|treeitem|tab)$/.test(role)) {
+          issues.push({ level: "serious", code: "not-focusable", msg: `${role} is not focusable — screen reader users cannot reach it with Tab` });
+        } else if (!inTab && el.tabIndex < 0 && !/^(option|menuitem|menuitemcheckbox|menuitemradio|treeitem|tab|radio)$/.test(role)) {
+          issues.push({ level: "moderate", code: "tabindex-neg", msg: `${role} has tabindex="-1" — reachable only programmatically, skipped by Tab` });
+        }
+      }
+      if (role === "link" && !el.hasAttribute("href") && el.tagName === "A") {
+        issues.push({ level: "moderate", code: "a-no-href", msg: "<a> without href — announced as a link but not keyboard-focusable" });
+      }
+      // State kept in a class only (team cards, "Select All", tab strips): the screen reader hears the same thing before and after
+      if (role === "tab" && !el.hasAttribute("aria-selected")) {
+        const w = stateWord(el);
+        issues.push({ level: "serious", code: "state-missing", attr: "aria-selected", msgKey: w ? "srMsgStateMissingTabCls" : "srMsgStateMissingTab", msgArgs: [w], msg: `tab has no aria-selected${w ? ` (state is only in class "${w}")` : ""} — the screen reader cannot say which tab is open` });
+      } else if (/^(button|option|menuitemcheckbox|switch|checkbox)$/.test(role) && tag !== "input" && tag !== "summary" && stateWord(el) && !hasStateAttr(el)) {
+        const attr = stateAttrFor(el, role);
+        issues.push({ level: "serious", code: "state-missing", attr, msgKey: "srMsgStateMissing", msgArgs: [role, stateWord(el), attr], msg: `${role} keeps its state in class "${stateWord(el)}" only — no ${attr}, so the screen reader announces it identically in both states` });
+      }
+      const req = requiredIssue(el, role, tag, name);
+      if (req) issues.push(req);
+      const ro = readonlyIssue(el, role, tag);
+      if (ro) issues.push(ro);
+      const stp = stepperIssue(el, tag, role);
+      if (stp) issues.push(stp);
+      for (const li of linkIssues(el, role, tag, name)) issues.push(li);
+      const idx = rows.length;
+      rows.push({
+        sel: cssPath(el), tag, role, name, states: stateOf(el, role), depth, lang: langOf(el), cls: clsOf(el), component: componentOf(el),
+        html: el.outerHTML.slice(0, 160), issues, live: liveOf(el, role),
+      });
+      issuesTotal.count += issues.length;
+      if (role === "link" || role === "button") {
+        const key = role + "|" + name.toLowerCase();
+        if (name) {
+          if (!linkNames.has(key)) linkNames.set(key, []);
+          linkNames.get(key).push({ idx, href: el.getAttribute("href") || el.getAttribute("formaction") || "" });
+        }
+      }
+      if (LANDMARK.has(role)) {
+        if (!landmarkNames.has(role)) landmarkNames.set(role, []);
+        landmarkNames.get(role).push({ idx, name });
+      }
+      if (NAME_FROM_CONTENT.has(role) || role === "img" || role === "progressbar" || role === "meter" ||
+          role === "separator" || role === "textbox" || role === "combobox" || role === "listbox" || role === "slider") {
+        return; // the name already covers the subtree
+      }
+    } else {
+      // Unlabelled clickable container: div/span with a click handler or tabindex but no role
+      const clickable = el.hasAttribute("onclick") || (el.hasAttribute("tabindex") && !/^(a|button|input|select|textarea|summary|details|iframe|video|audio|dialog)$/.test(tag));
+      let emitted = false;
+      if (clickable && (tag === "div" || tag === "span" || tag === "li" || tag === "img" || tag === "svg" || tag === "i")) {
+        emitted = true;
+        rows.push({
+          sel: cssPath(el), tag, role: role || "generic", name: visibleText(el).slice(0, 80), states: [], depth, lang: langOf(el), cls: clsOf(el), component: componentOf(el),
+          html: el.outerHTML.slice(0, 160),
+          issues: [{ level: "serious", code: "clickable-no-role", msg: `<${tag}> is clickable/focusable but has no role — announced as plain text, no "button" or "link"` }],
+        });
+        issuesTotal.count++;
+      }
+      if (!emitted && tag === "div") {
+        const stp = stepperIssue(el, tag, role);
+        if (stp) {
+          emitted = true;
+          rows.push({ sel: cssPath(el), tag, role: "generic", name: visibleText(el).slice(0, 80), states: [], depth, lang: langOf(el), cls: clsOf(el), component: componentOf(el), html: el.outerHTML.slice(0, 160), issues: [stp] });
+          issuesTotal.count++;
+        }
+      }
+      // Plain text run: emit a text row so reading order is complete
+      let direct = "";
+      for (const c of el.childNodes) if (c.nodeType === 3) direct += c.data;
+      direct = direct.replace(/\s+/g, " ").trim();
+      if (direct && !emitted) {
+        rows.push({ sel: cssPath(el), tag, role: "text", name: direct.slice(0, 120), states: [], depth, lang: langOf(el), html: "", issues: [], live: liveOf(el, "") });
+      } else if (!emitted && liveOf(el, "")) {
+        // role-less aria-live container (e.g. <div aria-live="polite"><p>…</p></div>): keep it in the tree so the bilingual comparison can pair it
+        rows.push({ sel: cssPath(el), tag, role: "generic", name: visibleText(el).slice(0, 80), states: [], depth, lang: langOf(el), cls: clsOf(el), component: componentOf(el), html: el.outerHTML.slice(0, 160), issues: [], live: true });
+      }
+    }
+    for (const c of vnode.children || []) walk(c, depth + 1);
+  };
+
+  let rootV = null;
+  try { rootV = axe.utils.getNodeFromTree(document.body); } catch (_) {}
+  if (!rootV) { try { axe.teardown(); } catch (_) {} return { error: "could not build the accessibility tree" }; }
+  walk(rootV, 0);
+
+  // Duplicate link/button names that go to different places
+  for (const [key, list] of linkNames) {
+    if (list.length < 2) continue;
+    const hrefs = new Set(list.map((x) => x.href));
+    if (key.startsWith("link|") && hrefs.size < 2) continue; // same destination — fine
+    for (const { idx } of list) {
+      rows[idx].issues.push({ level: "moderate", code: "dup-name", msg: `same name as ${list.length - 1} other ${key.split("|")[0]}(s) ${key.startsWith("link|") ? "with different destinations" : ""} — indistinguishable when listed` });
+      issuesTotal.count++;
+    }
+  }
+  for (const [role, list] of landmarkNames) {
+    if (list.length < 2) continue;
+    const unnamed = list.filter((x) => !x.name);
+    const dupNames = list.map((x) => x.name.toLowerCase()).filter((n, i, a) => n && a.indexOf(n) !== i);
+    for (const x of list) {
+      if (!x.name && unnamed.length > 1 || (x.name && dupNames.includes(x.name.toLowerCase()))) {
+        rows[x.idx].issues.push({ level: "moderate", code: "dup-landmark", msg: `${list.length} "${role}" landmarks — give each a unique aria-label so they can be told apart in the landmarks list` });
+        issuesTotal.count++;
+      }
+    }
+  }
+  try { axe.teardown(); } catch (_) {}
+  const summary = { rows: rows.length, issues: issuesTotal.count,
+    interactive: rows.filter((r) => INTERACTIVE.has(r.role)).length,
+    headings: rows.filter((r) => r.role === "heading").length,
+    landmarks: rows.filter((r) => LANDMARK.has(r.role)).length,
+    images: rows.filter((r) => r.role === "img").length };
+  return { url: location.href, rows, summary, pageLang, truncated: rows.length >= 900 };
+}
+
+// Language / voice-switching check: text whose script contradicts the declared lang.
+/* ---- apply a mechanical screen reader fix in place (and undo it) ----
+   Self-contained (injected). The undo stack lives on the page window, keyed by the
+   selector the panel used, and keeps the element reference + its original outerHTML
+   so a retag (div → button) can still be reverted after the selector stopped matching. */
+function srApplyInPage(sel, patch) {
+  window.__a11yLensMuted = true;
+  setTimeout(() => { window.__a11yLensMuted = false; }, 1500);
+  const deepQ = (s) => {
+    if (s.includes(" >>> ")) {
+      let root = document, el = null;
+      for (const part of s.split(" >>> ")) {
+        el = null;
+        try { el = root.querySelector(part); } catch (_) {}
+        if (!el) return null;
+        root = el.shadowRoot || el;
+      }
+      return el;
+    }
+    try { const el = document.querySelector(s); if (el) return el; } catch (_) { return null; }
+    const walk = (root) => {
+      for (const h of root.querySelectorAll("*")) {
+        if (h.shadowRoot) {
+          let f = null;
+          try { f = h.shadowRoot.querySelector(s); } catch (_) {}
+          if (f) return f;
+          f = walk(h.shadowRoot);
+          if (f) return f;
+        }
+      }
+      return null;
+    };
+    return walk(document);
+  };
+  const cssPath = (el) => {
+    const parts = [];
+    let cur = el;
+    for (let depth = 0; cur && cur.nodeType === 1 && depth < 6; depth++) {
+      if (cur.id) { parts.unshift("#" + CSS.escape(cur.id)); break; }
+      const tag = cur.tagName.toLowerCase();
+      if (tag === "body" || tag === "html") { parts.unshift(tag); break; }
+      const parent = cur.parentElement;
+      if (!parent) {
+        const root = cur.getRootNode && cur.getRootNode();
+        if (root && root.host) return cssPath(root.host) + " >>> " + [tag, ...parts].join(" > ");
+        parts.unshift(tag);
+        break;
+      }
+      const idx = [...parent.children].indexOf(cur) + 1;
+      parts.unshift(`${tag}:nth-child(${idx})`);
+      cur = parent;
+    }
+    return parts.join(" > ");
+  };
+  if (!sel || !patch) return { error: "nothing to apply" };
+  let el = deepQ(sel);
+  if (!el) return { error: "element not found on the page (" + sel + ")" };
+  if (patch.closest) {
+    const anc = el.closest(patch.closest);
+    if (!anc) return { error: "no ancestor matching " + patch.closest };
+    el = anc;
+  }
+  const stack = (window.__a11yLensUndo = window.__a11yLensUndo || {});
+  const original = el.outerHTML;
+  // <html> cannot be re-parsed from outerHTML; keep its attributes instead
+  const attrs = el === el.ownerDocument.documentElement ? [...el.attributes].map((a) => [a.name, a.value]) : null;
+  let target = el, warning = "";
+  if (patch.setAttr || patch.removeAttr) {
+    for (const [k, v] of Object.entries(patch.setAttr || {})) {
+      if (!/^[a-zA-Z_:][-a-zA-Z0-9_:.]*$/.test(k)) return { error: "bad attribute name " + k };
+      el.setAttribute(k, v == null ? "" : String(v));
+    }
+    for (const k of patch.removeAttr || []) el.removeAttribute(k);
+  } else if (patch.appendHidden) {
+    // visually-hidden hint text inside the element ("(opens in a new tab)", "(PDF)") — part of the accessible name, invisible on screen
+    const text = String(patch.appendHidden).trim();
+    if (!text) return { error: "no hint text" };
+    const span = el.ownerDocument.createElement("span");
+    span.className = "__a11y_lens_vh";
+    span.style.cssText = "position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap";
+    span.textContent = " " + text;
+    el.appendChild(span);
+  } else if (patch.liveRegion) {
+    el.setAttribute("role", patch.liveRegion === "alert" ? "alert" : "status");
+    if (!el.hasAttribute("aria-live")) el.setAttribute("aria-live", patch.liveRegion === "alert" ? "assertive" : "polite");
+    if (!el.hasAttribute("aria-atomic")) el.setAttribute("aria-atomic", "true");
+  } else if (patch.retag) {
+    if (!/^[a-z][a-z0-9-]*$/.test(patch.retag)) return { error: "bad tag " + patch.retag };
+    const nu = document.createElement(patch.retag);
+    for (const a of [...el.attributes]) {
+      if (a.name === "tabindex" || a.name === "role") continue;
+      if (patch.retag === "button" && (a.name === "href" || a.name === "target")) continue; // a pseudo-link's href="#" has no meaning on a button
+      nu.setAttribute(a.name, a.value);
+    }
+    if (patch.retag === "button" && !nu.hasAttribute("type")) nu.setAttribute("type", "button");
+    if (patch.retag === "button" && el.tabIndex < 0 && el.hasAttribute("tabindex")) nu.setAttribute("tabindex", "-1");
+    nu.innerHTML = el.innerHTML;
+    el.replaceWith(nu);
+    target = nu;
+    warning = "JavaScript listeners attached with addEventListener are not carried over — re-bind them (inline on* attributes were kept)";
+  } else if (patch.wrapText) {
+    const text = String(patch.wrapText.text || "").trim();
+    if (!text) return { error: "no text to wrap" };
+    const doc = el.ownerDocument;
+    const walker = doc.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    let node = null, needle = text, hit = -1;
+    const nodes = [];
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) nodes.push(n);
+    const find = (s) => { for (const n of nodes) { const i = n.data.indexOf(s); if (i >= 0) return [n, i]; } return null; };
+    let found = find(needle);
+    // the run may have been aggregated across several text nodes — shrink at word boundaries until one node contains it
+    while (!found && needle.includes(" ")) { needle = needle.slice(0, needle.lastIndexOf(" ")).trim(); if (needle.length < 2) break; found = find(needle); }
+    if (!found) return { error: "text run not found inside the element (it may span several elements)" };
+    if (needle !== text) warning = "only the first part of the run (\"" + needle.slice(0, 40) + "…\") sits in one text node and was wrapped; wrap the rest by hand";
+    [node, hit] = found;
+    const after = node.splitText(hit);
+    after.splitText(needle.length);
+    const span = doc.createElement("span");
+    if (patch.wrapText.lang) span.setAttribute("lang", patch.wrapText.lang);
+    if (patch.wrapText.dir) span.setAttribute("dir", patch.wrapText.dir);
+    after.parentNode.insertBefore(span, after);
+    span.appendChild(after);
+    target = el;
+  } else {
+    return { error: "unknown patch" };
+  }
+  (stack[sel] = stack[sel] || []).push({ el: target, html: original, attrs });
+  try { target.scrollIntoView({ block: "center", behavior: "smooth" }); } catch (_) {}
+  return { ok: true, sel: cssPath(target), html: target.outerHTML.slice(0, 200), warning, depth: stack[sel].length };
+}
+
+function srUndoInPage(sel) {
+  window.__a11yLensMuted = true;
+  setTimeout(() => { window.__a11yLensMuted = false; }, 1500);
+  const stack = window.__a11yLensUndo || {};
+  const list = stack[sel];
+  if (!list || !list.length) return { error: "nothing to undo for " + sel };
+  const entry = list.pop();
+  const el = entry.el;
+  if (!el || !el.parentNode) return { error: "the element is no longer in the page — reload to reset" };
+  const parent = el.parentNode;
+  // <html> cannot be replaced: copy its attributes back instead
+  if (entry.attrs) {
+    for (const a of [...el.attributes]) el.removeAttribute(a.name);
+    for (const [k, v] of entry.attrs) el.setAttribute(k, v);
+    if (!list.length) delete stack[sel];
+    return { ok: true, remaining: list.length, html: el.outerHTML.slice(0, 200) };
+  }
+  const tpl = el.ownerDocument.createElement("template");
+  tpl.innerHTML = entry.html;
+  const restored = tpl.content.firstElementChild;
+  if (!restored) return { error: "could not rebuild the original element" };
+  const nu = el.ownerDocument.importNode(restored, true);
+  parent.replaceChild(nu, el);
+  // deeper entries for the same selector point at the element we just replaced; refresh them
+  for (const e of list) if (e.el === el) e.el = nu;
+  if (!list.length) delete stack[sel];
+  return { ok: true, remaining: list.length, html: nu.outerHTML.slice(0, 200) };
+}
+
+function langCheckInPage() {
+  const AR = /[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]/g;
+  const LAT = /[A-Za-zÀ-ɏ]/g;
+  const cssPath = (el) => {
+    const parts = [];
+    let cur = el;
+    for (let depth = 0; cur && cur.nodeType === 1 && depth < 6; depth++) {
+      if (cur.id) { parts.unshift("#" + CSS.escape(cur.id)); break; }
+      const tag = cur.tagName.toLowerCase();
+      if (tag === "body" || tag === "html") { parts.unshift(tag); break; }
+      const parent = cur.parentElement;
+      if (!parent) { parts.unshift(tag); break; }
+      parts.unshift(`${tag}:nth-child(${[...parent.children].indexOf(cur) + 1})`);
+      cur = parent;
+    }
+    return parts.join(" > ");
+  };
+  const primary = (l) => (l || "").trim().toLowerCase().split(/[-_]/)[0];
+  const VALID = /^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{2,8})*$/;
+  const htmlLang = document.documentElement.getAttribute("lang") || "";
+  const htmlDir = document.documentElement.getAttribute("dir") || "";
+  const issues = [];
+  let totalAr = 0, totalLat = 0;
+  const seen = new Map(); // parent el -> agg
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+    acceptNode(n) {
+      const p = n.parentElement;
+      if (!p) return NodeFilter.FILTER_REJECT;
+      if (/^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|CODE|PRE|KBD|SAMP)$/.test(p.tagName)) return NodeFilter.FILTER_REJECT;
+      if (p.closest(".__a11y_lens_overlay")) return NodeFilter.FILTER_REJECT;
+      return n.data.trim().length >= 3 ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
+    },
+  });
+  let n, count = 0;
+  while ((n = walker.nextNode()) && count < 20000) {
+    count++;
+    const p = n.parentElement;
+    if (!p.getClientRects().length) continue;
+    const text = n.data;
+    const ar = (text.match(AR) || []).length;
+    const lat = (text.match(LAT) || []).length;
+    totalAr += ar; totalLat += lat;
+    const langEl = p.closest("[lang]");
+    const declared = langEl ? primary(langEl.getAttribute("lang")) : "";
+    let agg = seen.get(p);
+    if (!agg) { agg = { ar: 0, lat: 0, words: 0, text: "", declared, sel: null, el: p, arRun: "", latRun: "" }; seen.set(p, agg); }
+    agg.ar += ar; agg.lat += lat;
+    agg.words += (text.trim().split(/\s+/).length);
+    if (agg.text.length < 100) agg.text += " " + text.trim();
+    // Script runs: a sentence fragment in the "other" script inside this node.
+    if (!agg.latRun) {
+      const m = text.match(/(?:[A-Za-zÀ-ɏ]{2,}[\s,.'’&-]*){2,}/g);
+      const best = m && m.map((x) => x.trim()).sort((a, b) => b.length - a.length)[0];
+      if (best && (best.match(LAT) || []).length >= 8) agg.latRun = best;
+    }
+    if (!agg.arRun) {
+      const m = text.match(/(?:[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]{2,}[\s،.؛:]*){1,}/g);
+      const best = m && m.map((x) => x.trim()).sort((a, b) => b.length - a.length)[0];
+      if (best && (best.match(AR) || []).length >= 4) agg.arRun = best;
+    }
+  }
+  const majority = totalAr > totalLat * 1.5 ? "ar" : totalLat > totalAr * 1.5 ? "latin" : "mixed";
+
+  if (!htmlLang) {
+    issues.push({ level: "critical", type: "html-lang-missing", sel: "html", snippet: "", declared: "", detected: majority,
+      msg: "<html> has no lang attribute — the screen reader guesses the voice from the user's default (WCAG 3.1.1)" });
+  } else if (!VALID.test(htmlLang)) {
+    issues.push({ level: "serious", type: "html-lang-invalid", sel: "html", snippet: htmlLang, declared: htmlLang, detected: majority,
+      msg: `lang="${htmlLang}" is not a valid BCP 47 tag — screen readers ignore it` });
+  } else if (majority === "ar" && primary(htmlLang) !== "ar") {
+    issues.push({ level: "critical", type: "html-lang-mismatch", sel: "html", snippet: "", declared: htmlLang, detected: "Arabic",
+      msg: `page is mostly Arabic but lang="${htmlLang}" — the whole page is read with a ${htmlLang} voice` });
+  } else if (majority === "latin" && primary(htmlLang) === "ar") {
+    issues.push({ level: "critical", type: "html-lang-mismatch", sel: "html", snippet: "", declared: htmlLang, detected: "Latin",
+      msg: `page is mostly Latin-script text but lang="ar" — read with an Arabic voice` });
+  }
+  if (majority === "ar" && htmlDir !== "rtl") {
+    issues.push({ level: "serious", type: "html-dir", sel: "html", snippet: "", declared: htmlDir || "(none)", detected: "Arabic",
+      msg: "page is mostly Arabic but <html> has no dir=\"rtl\" — punctuation and mixed numbers render out of order" });
+  }
+  for (const el of document.querySelectorAll("[lang]")) {
+    const v = el.getAttribute("lang");
+    if (el !== document.documentElement && v && !VALID.test(v)) {
+      issues.push({ level: "moderate", type: "lang-invalid", sel: cssPath(el), snippet: v, declared: v, detected: "",
+        msg: `lang="${v}" is not a valid BCP 47 tag` });
+    }
+  }
+  const pageLang = primary(htmlLang);
+  let runs = 0;
+  for (const agg of seen.values()) {
+    if (issues.length >= 120) break;
+    const declared = agg.declared || pageLang;
+    if (!declared) continue; // already reported: no lang anywhere
+    const isArDeclared = declared === "ar" || declared === "fa" || declared === "ur";
+    if (agg.arRun && !isArDeclared) {
+      runs++;
+      issues.push({ level: "serious", type: "text-mismatch", sel: cssPath(agg.el), html: agg.el.outerHTML.slice(0, 200), snippet: agg.arRun.slice(0, 90),
+        declared, detected: "Arabic", msg: `Arabic text inside lang="${declared}" — read letter-by-letter or with the wrong voice; wrap it in an element with lang="ar"` });
+    } else if (agg.latRun && isArDeclared) {
+      runs++;
+      issues.push({ level: "moderate", type: "text-mismatch", sel: cssPath(agg.el), html: agg.el.outerHTML.slice(0, 200), snippet: agg.latRun.slice(0, 90),
+        declared, detected: "Latin", msg: `Latin-script text inside lang="${declared}" — pronounced with an Arabic voice; wrap it in lang="en" (or the right language)` });
+    }
+    if (agg.ar >= 4 && agg.ar > agg.lat) {
+      const dir = getComputedStyle(agg.el).direction;
+      if (dir === "ltr" && !agg.el.closest("[dir='auto']") && agg.words >= 3) {
+        issues.push({ level: "minor", type: "dir", sel: cssPath(agg.el), html: agg.el.outerHTML.slice(0, 200), snippet: agg.text.trim().slice(0, 90),
+          declared: "ltr", detected: "Arabic", msg: "Arabic sentence rendered left-to-right — add dir=\"rtl\" (or dir=\"auto\") so numbers and punctuation order correctly" });
+      }
+    }
+  }
+  return { url: location.href, htmlLang, htmlDir, majority, totals: { arabic: totalAr, latin: totalLat }, issues, mismatchedRuns: runs };
+}
+
+// Live-region monitor: logs what would be announced and what changed silently.
+function liveInstallInPage() {
+  if (window.__a11yLive) { try { window.__a11yLive.obs.disconnect(); } catch (_) {} try { window.__a11yLive.cleanup && window.__a11yLive.cleanup(); } catch (_) {} }
+  const LIVE_SEL = "[aria-live],[role='status'],[role='alert'],[role='log'],[role='marquee'],[role='timer'],output";
+  const cssPath = (el) => {
+    const parts = [];
+    let cur = el;
+    for (let depth = 0; cur && cur.nodeType === 1 && depth < 6; depth++) {
+      if (cur.id) { parts.unshift("#" + CSS.escape(cur.id)); break; }
+      const tag = cur.tagName.toLowerCase();
+      if (tag === "body" || tag === "html") { parts.unshift(tag); break; }
+      const parent = cur.parentElement;
+      if (!parent) { parts.unshift(tag); break; }
+      parts.unshift(`${tag}:nth-child(${[...parent.children].indexOf(cur) + 1})`);
+      cur = parent;
+    }
+    return parts.join(" > ");
+  };
+  const state = { log: [], obs: null, start: Date.now(), silentCount: 0, announcedCount: 0, mutations: 0, cleanup: null };
+  const now = () => Date.now() - state.start;
+  const elOf = (n) => (n.nodeType === 1 ? n : n.parentElement);
+  const isOurs = (el) => !!(el && el.closest && el.closest(".__a11y_lens_overlay,#__a11y_lens_style"));
+  const regionOf = (n) => { const el = elOf(n); return el && el.closest ? el.closest(LIVE_SEL) : null; };
+  const politeness = (region) => {
+    const v = region.getAttribute("aria-live");
+    if (v) return v;
+    const r = region.getAttribute("role");
+    if (r === "alert") return "assertive";
+    return "polite";
+  };
+  const textOf = (el) => ((el.innerText != null ? el.innerText : el.textContent) || "").replace(/\s+/g, " ").trim().slice(0, 160);
+  const push = (e) => { e.at = Date.now(); if (e.kind === "announced" || e.kind === "focused") state.announcedCount++; state.log.push(e); if (state.log.length > 400) state.log.shift(); }; // `at`: wall clock, so the panel can merge logs into one timeline
+  const visible = (el) => el.getClientRects && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== "hidden";
+
+  const obs = new MutationObserver((muts) => {
+    state.mutations += muts.length;
+    if (window.__a11yLensMuted) return;
+    const announced = new Map();
+    const inserted = [];
+    const removedTexts = new Set();
+    const revealed = [];
+    for (const m of muts) {
+      if (m.type === "childList") {
+        for (const r of m.removedNodes) {
+          const t = r.nodeType === 3 ? r.data : (r.textContent || "");
+          removedTexts.add(t.replace(/\s+/g, " ").trim().slice(0, 160));
+        }
+        for (const n of m.addedNodes) {
+          if (n.nodeType !== 1 && n.nodeType !== 3) continue;
+          if (n.nodeType === 1 && isOurs(n)) continue;
+          if (n.nodeType === 1) {
+            let live = null;
+            try { live = n.matches(LIVE_SEL) ? n : n.querySelector(LIVE_SEL); } catch (_) {}
+            if (live && !regionOf(n.parentNode)) {
+              const txt = textOf(live);
+              const isAlert = live.getAttribute("role") === "alert";
+              push({ t: now(), kind: isAlert ? "announced" : "risky", politeness: politeness(live), sel: cssPath(live), text: txt, html: live.outerHTML.slice(0, 200),
+                note: isAlert ? "role=alert inserted with content — announced by most screen readers" :
+                  "live region inserted at the same time as its content — most screen readers only announce changes to a region that already existed; render the empty region on load, then set its text" });
+              continue;
+            }
+          }
+          const region = regionOf(n.nodeType === 3 ? m.target : n.parentNode || m.target);
+          if (region) { announced.set(region, true); continue; }
+          if (n.nodeType === 1) inserted.push(n);
+          else if (n.data.trim().length >= 3) inserted.push(m.target);
+        }
+      } else if (m.type === "characterData") {
+        const region = regionOf(m.target);
+        if (region) announced.set(region, true);
+        else if (m.target.data.trim().length >= 3 && m.target.parentElement && !isOurs(m.target.parentElement)) inserted.push(m.target.parentElement);
+      } else if (m.type === "attributes") {
+        const el = m.target;
+        if (el.nodeType !== 1 || isOurs(el)) continue;
+        const old = m.oldValue || "";
+        let wasHidden = false;
+        if (m.attributeName === "hidden") wasHidden = m.oldValue !== null && !el.hasAttribute("hidden");
+        else if (m.attributeName === "style") wasHidden = /display\s*:\s*none|visibility\s*:\s*hidden/.test(old) && !/display\s*:\s*none|visibility\s*:\s*hidden/.test(el.getAttribute("style") || "");
+        else if (m.attributeName === "class") wasHidden = /\b(hidden|d-none|invisible|is-hidden|sr-only|collapse)\b/.test(old) && !/\b(hidden|d-none|invisible|is-hidden|sr-only|collapse)\b/.test(el.className || "");
+        else if (m.attributeName === "aria-live" || m.attributeName === "role") {
+          if (el.matches(LIVE_SEL) && textOf(el)) {
+            push({ t: now(), kind: "risky", politeness: politeness(el), sel: cssPath(el), text: textOf(el), html: el.outerHTML.slice(0, 200), code: "live-late",
+              note: "aria-live/role set on an element that already has content — the existing text is not announced; set the attribute first, change the text later" });
+          }
+          continue;
+        }
+        if (wasHidden) {
+          const region = regionOf(el);
+          if (region) announced.set(region, true); else revealed.push(el);
+        }
+      }
+    }
+    for (const region of announced.keys()) {
+      push({ t: now(), kind: "announced", politeness: politeness(region), sel: cssPath(region), text: textOf(region) || "(region emptied)",
+        atomic: region.getAttribute("aria-atomic") === "true" });
+    }
+    // Silent changes: visible new content outside any live region.
+    const seen = new Set();
+    const candidates = [];
+    for (const el of [...inserted, ...revealed]) { if (el && el.isConnected && !seen.has(el)) { seen.add(el); candidates.push(el); } }
+    if (!candidates.length) return;
+    if (candidates.length > 200) {
+      // A huge batch is a re-render whatever its contents — skip the quadratic containment pass and layout reads.
+      if (now() >= 1500) push({ t: now(), kind: "rerender", sel: cssPath(candidates[0]), text: `${candidates.length} nodes changed at once`, note: "large re-render — probably a route change or list refresh; a screen reader stays where it was and hears nothing" });
+      return;
+    }
+    const tops = candidates.filter((el) => !candidates.some((o) => o !== el && o.contains(el)));
+    const fresh = [];
+    for (const el of tops) {
+      if (fresh.length > 25) break; // enough to classify as a re-render; stop forcing layout
+      if (!visible(el)) continue;
+      const txt = textOf(el);
+      if (txt.length < 3) continue;
+      if (removedTexts.has(txt)) continue; // re-render of identical content
+      fresh.push(el);
+    }
+    if (!fresh.length) return;
+    if (now() < 1500) return; // page still settling after monitor start
+    if (fresh.length > 25) {
+      push({ t: now(), kind: "rerender", sel: cssPath(fresh[0]), text: `${fresh.length} nodes changed at once`, note: "large re-render — probably a route change or list refresh; a screen reader stays where it was and hears nothing" });
+      return;
+    }
+    for (const el of fresh.slice(0, 8)) {
+      const entry = { t: now(), kind: "silent", sel: cssPath(el), text: textOf(el), tag: el.tagName.toLowerCase(), html: el.outerHTML.slice(0, 200) };
+      push(entry);
+      state.silentCount++;
+      // If focus moves into the new content shortly after, screen readers will read it — downgrade.
+      setTimeout(() => {
+        const ae = document.activeElement;
+        let modal = null;
+        try { modal = el.matches("dialog,[role='dialog'],[role='alertdialog']") ? el : el.querySelector("dialog,[role='dialog'],[role='alertdialog']"); } catch (_) {}
+        if (ae && ae !== document.body && el.contains(ae)) {
+          entry.kind = "focused";
+          entry.note = modal ? "dialog opened and focus moved inside — announced via focus" : "focus moved into the new content — announced via focus";
+        } else if (modal) {
+          entry.kind = "silent";
+          entry.code = "dialog-no-focus";
+          entry.note = "dialog appeared but focus did not move into it — screen reader users don't know it opened";
+        } else if (!el.isConnected) {
+          entry.code = "transient";
+          entry.note = "transient (removed again quickly) — a toast or spinner; if it matters, it needs role=status";
+        }
+      }, 700);
+    }
+  });
+  obs.observe(document.body, {
+    subtree: true, childList: true, characterData: true,
+    attributes: true, attributeFilter: ["hidden", "style", "class", "aria-live", "role"], attributeOldValue: true,
+  });
+  state.obs = obs;
+
+  // Custom-control state watch: a click that only toggles a state class on the control (or an
+  // ancestor card/tab) or shows/hides its aria-controls / next-sibling target, while none of the
+  // control's aria-* state attributes changed → "state-not-announced" (the screen reader hears the
+  // same "Select all, button" before and after). Judged 400 ms after the click.
+  // Whole class tokens only (same vocabulary as the static pass): "active:bg-blue-800" or "text-on-primary" are not state.
+  const STATE_WORDS = /^(is-|has-)?(active|selected|checked|on|current|expanded|open|collapsed)$|--(active|selected|checked|current|expanded|open|collapsed)$/i;
+  const STATE_ATTRS = ["aria-pressed", "aria-selected", "aria-checked", "aria-expanded", "aria-current"];
+  const stateWords = (el) => (el.getAttribute("class") || "").split(/\s+/).filter((w) => STATE_WORDS.test(w)).map((w) => w.toLowerCase()).sort().join(" ");
+  // The next-sibling fallback only applies to controls that look like a disclosure; a Search button whose results box appears is not one.
+  const DISCLOSURE_RE = /toggle|dropdown|accordion|expand|collapse|menu|filter|more|show|hide|options|advanced|details|المزيد|إظهار|إخفاء|خيارات|قائمة/i;
+  const looksDisclosure = (c) => c.hasAttribute("aria-haspopup") || DISCLOSURE_RE.test((c.getAttribute("class") || "") + " " + (c.id || "") + " " + textOf(c).slice(0, 80));
+  const ariaSnap = (el) => STATE_ATTRS.map((n) => el.getAttribute(n)).join("|");
+  const onClick = (e) => {
+    if (window.__a11yLensMuted) return;
+    let el = (e.composedPath && e.composedPath()[0]) || e.target;
+    if (!el || el.nodeType !== 1) el = el && el.parentElement;
+    if (!el || isOurs(el)) return;
+    const ctl = (el.closest && el.closest("button,[role],a,[tabindex],[onclick],summary,input,label")) || el;
+    if (/^(input|select|textarea|option|summary|details|label)$/i.test(ctl.tagName)) return; // native state is announced by the browser
+    const chain = [];
+    for (let cur = ctl, i = 0; cur && cur !== document.body && i < 4; cur = cur.parentElement, i++) chain.push({ el: cur, cls: stateWords(cur), aria: ariaSnap(cur) });
+    const targets = [];
+    for (const id of (ctl.getAttribute("aria-controls") || "").split(/\s+/).filter(Boolean)) { const t = document.getElementById(id); if (t) targets.push({ t, vis: visible(t) }); }
+    if (!targets.length && ctl.nextElementSibling && !isOurs(ctl.nextElementSibling) && looksDisclosure(ctl)) targets.push({ t: ctl.nextElementSibling, vis: visible(ctl.nextElementSibling) });
+    setTimeout(() => {
+      if (!ctl.isConnected || window.__a11yLensMuted) return;
+      const changed = chain.find((c) => c.el.isConnected && stateWords(c.el) !== c.cls);
+      const toggled = targets.find((x) => x.t.isConnected && visible(x.t) !== x.vis);
+      if (!changed && !toggled) return;
+      const owner = changed ? changed.el : ctl;
+      if (chain.some((c) => c.el.isConnected && ariaSnap(c.el) !== c.aria)) return; // an aria state did change — announced
+      const role = owner.getAttribute("role") || ctl.getAttribute("role") || "";
+      const words = changed ? changed.cls + " " + stateWords(owner) : "";
+      const attr = role === "tab" || role === "option" ? "aria-selected" : /^(checkbox|menuitemcheckbox|switch)$/.test(role) ? "aria-checked" :
+        toggled && !changed ? "aria-expanded" : /\b(open|expanded|collapsed)\b/.test(words) ? "aria-expanded" :
+        /\bcurrent\b/.test(words) || (owner.tagName === "A" && !toggled) ? "aria-current" : toggled ? "aria-expanded" : "aria-pressed";
+      const label = textOf(ctl).slice(0, 40) || ctl.tagName.toLowerCase();
+      const what = changed ? `class "${changed.cls || "(none)"}" → "${stateWords(owner) || "(none)"}"${owner !== ctl ? " on " + cssPath(owner) : ""}` : `${cssPath(toggled.t)} ${toggled.vis ? "hidden" : "shown"}`;
+      push({ t: now(), kind: "silent", code: "state-not-announced", attr, sel: cssPath(owner), tag: owner.tagName.toLowerCase(), html: owner.outerHTML.slice(0, 200), text: label, target: toggled ? cssPath(toggled.t) : "",
+        note: `click changed ${what} but no aria state changed — a screen reader user hears "${label}, ${role || owner.tagName.toLowerCase()}" exactly the same before and after; add ${attr}` });
+      state.silentCount++;
+    }, 400);
+  };
+  document.addEventListener("click", onClick, true);
+
+  // SPA route changes: pushState/replaceState (wrapped), popstate, hashchange and a URL poll
+  // (the wrap only sees calls from this world), plus <title> mutations. 1.5 s after the URL
+  // changes we judge what a screen reader user got: a new title, focus moved, an announcement.
+  const ROUTE_MS = 1500;
+  const h1Of = () => { let h = null; try { h = document.querySelector("main h1") || document.querySelector("h1"); } catch (_) {} return h; };
+  const shortUrl = (u) => { let s = ""; try { const x = new URL(u); s = (x.pathname + x.search + x.hash) || "/"; } catch (_) { s = String(u || ""); } return s.length > 60 ? "…" + s.slice(-57) : s; };
+  const focusable = () => { let a = document.activeElement; while (a && a.shadowRoot && a.shadowRoot.activeElement) a = a.shadowRoot.activeElement; return a && a !== document.body && a !== document.documentElement ? a : null; };
+  const route = { url: location.href, title: document.title, h1: (() => { const h = h1Of(); return h ? textOf(h) : ""; })(), lastTitleChange: null, pending: null, poll: null };
+  const settle = () => {
+    const p = route.pending;
+    if (!p) return;
+    route.pending = null;
+    const urlAfter = location.href;
+    const titleAfter = document.title;
+    const h1El = h1Of();
+    const h1After = h1El ? textOf(h1El) : "";
+    const ae = focusable();
+    const focusMoved = p.focusMoved || !!(ae && ae !== p.focusBefore);
+    const announced = state.announcedCount > p.announcedBefore;
+    const changed = state.mutations > p.mutationsBefore;
+    const titleChanged = titleAfter !== p.titleBefore;
+    const h1Dup = !!h1After && h1After === p.h1Before;
+    // soft: only the query string changed (sort / filter / pagination) or a hash router stayed on the same path via replaceState —
+    // the same title and H1 are correct there; only a completely silent change is noted, as minor.
+    const soft = !!p.soft;
+    const base = { t: p.t, kind: "route", via: p.via, url: urlAfter, urlBefore: p.urlBefore, text: `${shortUrl(p.urlBefore)} → ${shortUrl(urlAfter)}`,
+      titleBefore: p.titleBefore, titleAfter, h1Before: p.h1Before, h1After, focusMoved, announced, soft,
+      focusTo: ae ? cssPath(ae) : "", sel: h1El ? cssPath(h1El) : "", html: h1El ? h1El.outerHTML.slice(0, 200) : "", tag: h1El ? "h1" : "" };
+    if (!titleChanged && !focusMoved && !announced) {
+      if (soft && !changed) { route.url = urlAfter; route.title = titleAfter; route.h1 = h1After; route.lastTitleChange = null; return; } // query changed, nothing re-rendered: nothing to announce
+      push({ ...base, code: "route-silent", level: soft ? "minor" : "critical", noteKey: soft ? "srRouteNoteQuerySilent" : "srRouteNoteSilent", noteArgs: [],
+        note: soft ? "the query string changed and content was re-rendered, but nothing was announced — say what changed (e.g. \"Page 2 of 10\", \"12 results\") in a live region"
+          : "URL changed but the title stayed the same, focus did not move and nothing was announced — a screen reader user does not know the page changed" });
+    } else {
+      if (!titleChanged && !soft) push({ ...base, code: "route-title-stale", level: "serious", noteKey: "srRouteNoteTitleStale", noteArgs: [titleAfter], note: `document.title is still "${titleAfter || "(empty)"}" after the URL changed — the tab title and the first thing announced on a page change never update` });
+      if (!focusMoved && changed) {
+        const fb = p.focusBefore;
+        const stale = !fb || !fb.isConnected || !visible(fb);
+        let mid = false;
+        if (!stale && !soft) { const r = fb.getBoundingClientRect(); mid = r.top > 0; }
+        if (stale || mid) push({ ...base, sel: fb && fb.isConnected ? cssPath(fb) : base.sel, html: fb && fb.isConnected ? fb.outerHTML.slice(0, 200) : base.html, tag: fb ? fb.tagName.toLowerCase() : "", code: "route-focus-stuck", level: "moderate",
+          noteKey: stale ? "srRouteNoteFocusStale" : "srRouteNoteFocusMid", noteArgs: [],
+          note: stale ? "focus stayed on an element that is gone or hidden after the route change — the screen reader cursor is stranded" : "focus stayed mid-page on the control that triggered the navigation while the content above it was replaced — move focus to the new page's heading" });
+      }
+      if (titleChanged && focusMoved) push({ ...base, code: "route-ok", level: "info", noteKey: "srRouteNoteOk", noteArgs: [announced], note: "title changed and focus moved — a screen reader user hears the new page" + (announced ? " (and a live announcement)" : "") });
+    }
+    if (h1Dup && !soft) push({ ...base, code: "route-h1-dup", level: "moderate", noteKey: "srRouteNoteH1", noteArgs: [h1After.slice(0, 60)], note: `the H1 still reads "${h1After.slice(0, 60)}" on the new URL — every page/step needs its own H1` });
+    route.url = urlAfter; route.title = titleAfter; route.h1 = h1After; route.lastTitleChange = null;
+  };
+  // In-page anchor (skip link, "Back to top" href="#", table of contents): same path + query, and the fragment is empty or names an element.
+  // A hash router (#/services) has no such element and is judged like any other route change.
+  const inPageAnchor = (a, b) => {
+    if (a.pathname !== b.pathname || a.search !== b.search || a.hash === b.hash) return false;
+    const frag = b.hash.replace(/^#/, "");
+    if (!frag || frag === "top") return true;
+    let id = frag; try { id = decodeURIComponent(frag); } catch (_) {}
+    try { return !!(document.getElementById(id) || document.querySelector(`a[name="${CSS.escape(id)}"]`)); } catch (_) { return false; }
+  };
+  const onRoute = (via) => {
+    if (location.href === route.url) return;
+    if (route.pending) return; // a second change inside the window: judged together at settle
+    let soft = false;
+    try {
+      const before = new URL(route.url), after = new URL(location.href);
+      if (inPageAnchor(before, after)) { route.url = location.href; return; }
+      soft = before.pathname === after.pathname && before.search !== after.search;
+    } catch (_) {}
+    const recent = route.lastTitleChange && Date.now() - route.lastTitleChange.at < ROUTE_MS;
+    route.pending = { t: now(), via, soft, urlBefore: route.url, titleBefore: recent ? route.lastTitleChange.from : route.title, h1Before: route.h1,
+      focusBefore: focusable(), focusMoved: false, announcedBefore: state.announcedCount, mutationsBefore: state.mutations };
+    setTimeout(settle, ROUTE_MS);
+  };
+  const onFocusIn = (e) => {
+    const p = route.pending;
+    if (!p) return;
+    const el = (e.composedPath && e.composedPath()[0]) || e.target;
+    if (el && el.nodeType === 1 && el !== document.body && el !== p.focusBefore) p.focusMoved = true;
+  };
+  const onPop = () => setTimeout(() => onRoute("popstate"), 0);
+  const onHash = () => setTimeout(() => onRoute("hashchange"), 0);
+  const H = window.history, origPush = H.pushState, origReplace = H.replaceState;
+  try {
+    H.pushState = function () { const r = origPush.apply(this, arguments); onRoute("pushState"); return r; };
+    H.replaceState = function () { const r = origReplace.apply(this, arguments); onRoute("replaceState"); return r; };
+  } catch (_) {}
+  window.addEventListener("popstate", onPop);
+  window.addEventListener("hashchange", onHash);
+  document.addEventListener("focusin", onFocusIn, true);
+  route.poll = setInterval(() => onRoute("poll"), 250);
+  let titleObs = null;
+  try {
+    titleObs = new MutationObserver(() => {
+      if (route.pending) return;
+      if (document.title === route.title) return;
+      route.lastTitleChange = { at: Date.now(), from: route.title };
+      route.title = document.title;
+    });
+    if (document.head) titleObs.observe(document.head, { childList: true, subtree: true, characterData: true });
+  } catch (_) {}
+  state.cleanup = () => {
+    clearInterval(route.poll);
+    document.removeEventListener("click", onClick, true);
+    window.removeEventListener("popstate", onPop);
+    window.removeEventListener("hashchange", onHash);
+    document.removeEventListener("focusin", onFocusIn, true);
+    try { if (H.pushState !== origPush) H.pushState = origPush; if (H.replaceState !== origReplace) H.replaceState = origReplace; } catch (_) {}
+    try { titleObs && titleObs.disconnect(); } catch (_) {}
+  };
+
+  window.__a11yLive = state;
+  const regions = [...document.querySelectorAll(LIVE_SEL)].map((el) => ({
+    sel: cssPath(el), politeness: politeness(el), text: textOf(el),
+    atomic: el.getAttribute("aria-atomic") === "true",
+    relevant: el.getAttribute("aria-relevant") || "",
+    hidden: !visible(el) && !/sr-only|visually-hidden/.test(el.className || ""),
+  }));
+  return { regions };
+}
+
+function liveDrainInPage() {
+  const s = window.__a11yLive;
+  if (!s) return null;
+  return s.log.splice(0);
+}
+
+function liveStopInPage() {
+  const s = window.__a11yLive;
+  if (s) { try { s.obs.disconnect(); } catch (_) {} try { s.cleanup && s.cleanup(); } catch (_) {} }
+  window.__a11yLive = null;
+  return true;
+}
+
+// Focus trace: every focus move with the role/name the screen reader would announce,
+// plus focus-loss and modal-escape detection that a static scan cannot see.
+function focusInstallInPage() {
+  if (window.__a11yFocus) return { already: true };
+  const IMPLICIT = { a: "link", button: "button", input: "textbox", select: "combobox", textarea: "textbox",
+    summary: "button", h1: "heading", h2: "heading", h3: "heading", h4: "heading", h5: "heading", h6: "heading",
+    img: "img", nav: "navigation", main: "main", dialog: "dialog", iframe: "iframe", video: "video", audio: "audio" };
+  const INPUT_ROLE = { checkbox: "checkbox", radio: "radio", button: "button", submit: "button", reset: "button",
+    image: "button", range: "slider", number: "spinbutton", search: "searchbox", email: "textbox", tel: "textbox",
+    url: "textbox", password: "textbox", text: "textbox", file: "button", color: "button", date: "textbox", time: "textbox" };
+  const cssPath = (el) => {
+    const parts = [];
+    let cur = el;
+    for (let depth = 0; cur && cur.nodeType === 1 && depth < 6; depth++) {
+      if (cur.id) { parts.unshift("#" + CSS.escape(cur.id)); break; }
+      const tag = cur.tagName.toLowerCase();
+      if (tag === "body" || tag === "html") { parts.unshift(tag); break; }
+      const parent = cur.parentElement;
+      if (!parent) {
+        const root = cur.getRootNode && cur.getRootNode();
+        if (root && root.host) return cssPath(root.host) + " >>> " + [tag, ...parts].join(" > ");
+        parts.unshift(tag); break;
+      }
+      parts.unshift(`${tag}:nth-child(${[...parent.children].indexOf(cur) + 1})`);
+      cur = parent;
+    }
+    return parts.join(" > ");
+  };
+  const txt = (s) => (s || "").replace(/\s+/g, " ").trim();
+  const byIds = (el, attr) => {
+    const ids = (el.getAttribute(attr) || "").split(/\s+/).filter(Boolean);
+    const root = el.getRootNode ? el.getRootNode() : document;
+    return ids.map((id) => { const r = (root.getElementById ? root.getElementById(id) : null) || document.getElementById(id); return r ? txt(r.textContent) : ""; }).filter(Boolean).join(" ");
+  };
+  const accName = (el) => {
+    if (window.axe && window.axe.commons) {
+      try { const n = txt(window.axe.commons.text.accessibleText(el)); if (n) return n; } catch (_) {}
+    }
+    let n = byIds(el, "aria-labelledby"); if (n) return n;
+    n = txt(el.getAttribute("aria-label")); if (n) return n;
+    if (el.labels && el.labels.length) { n = txt([...el.labels].map((l) => l.textContent).join(" ")); if (n) return n; }
+    const tag = el.tagName.toLowerCase();
+    if (tag === "img" || tag === "area") { n = txt(el.getAttribute("alt")); if (n) return n; }
+    if (tag === "input" && /^(button|submit|reset)$/.test(el.type)) { n = txt(el.value); if (n) return n; }
+    if (tag === "input" && el.type === "image") { n = txt(el.alt); if (n) return n; }
+    if (tag === "iframe") { n = txt(el.title); if (n) return n; }
+    if (!/^(input|select|textarea)$/.test(tag)) {
+      n = txt(el.innerText != null ? el.innerText : el.textContent);
+      if (!n) { const imgs = el.querySelectorAll("img[alt],svg title,[aria-label]"); n = txt([...imgs].map((i) => i.getAttribute("alt") || i.getAttribute("aria-label") || i.textContent).join(" ")); }
+      if (n) return n.slice(0, 160);
+    }
+    n = txt(el.getAttribute("title")); if (n) return n;
+    if (tag === "input") { n = txt(el.getAttribute("placeholder")); if (n) return n; }
+    return "";
+  };
+  const roleOf = (el) => {
+    const r = el.getAttribute("role");
+    if (r) return r.split(/\s+/)[0];
+    const tag = el.tagName.toLowerCase();
+    if (tag === "input") return INPUT_ROLE[el.type] || "textbox";
+    if (tag === "a" && !el.hasAttribute("href")) return "generic";
+    return IMPLICIT[tag] || "generic";
+  };
+  const state = { log: [], start: Date.now(), lastEl: null, timer: null, handler: null, seq: 0 };
+  const now = () => Date.now() - state.start;
+  const push = (e) => { e.at = Date.now(); state.log.push(e); if (state.log.length > 400) state.log.shift(); }; // `at`: wall clock, so the panel can merge logs into one timeline
+  const deepActive = () => {
+    let a = document.activeElement;
+    while (a && a.shadowRoot && a.shadowRoot.activeElement) a = a.shadowRoot.activeElement;
+    return a;
+  };
+  const record = (el, via) => {
+    if (!el || el === state.lastEl && via !== "poll") return;
+    state.lastEl = el;
+    if (el === document.body || el === document.documentElement) {
+      push({ t: now(), seq: state.seq++, sel: "body", tag: "body", role: "document", name: "", via, issues: [
+        { level: "serious", code: "focus-lost", msg: "focus fell back to <body> — the previously focused element was removed or hidden; screen reader users are dumped at the top of the page" }] });
+      return;
+    }
+    const langEl = el.closest && el.closest("[lang]");
+    const lang = ((langEl ? langEl.getAttribute("lang") : document.documentElement.getAttribute("lang")) || "").trim().split(/[-_]/)[0].toLowerCase();
+    const entry = { t: now(), seq: state.seq++, sel: cssPath(el), tag: el.tagName.toLowerCase(), role: roleOf(el), name: accName(el), via, lang, issues: [], html: el.outerHTML.slice(0, 200) };
+    const stillFocused = el.isConnected && deepActive() === el;
+    const st = [];
+    const a = (n) => el.getAttribute(n);
+    if (a("aria-expanded")) st.push("expanded=" + a("aria-expanded"));
+    if (a("aria-checked")) st.push("checked=" + a("aria-checked")); else if (el.type === "checkbox" || el.type === "radio") st.push(el.checked ? "checked" : "not checked");
+    if (a("aria-pressed")) st.push("pressed=" + a("aria-pressed"));
+    if (a("aria-selected")) st.push("selected=" + a("aria-selected"));
+    if (a("aria-invalid") && a("aria-invalid") !== "false") st.push("invalid");
+    if (el.required || a("aria-required") === "true") st.push("required");
+    if (el.disabled || a("aria-disabled") === "true") st.push("disabled");
+    entry.states = st;
+    if (entry.role === "generic") {
+      entry.issues.push(entry.name
+        ? { level: "serious", code: "clickable-no-role", msg: `focusable <${entry.tag}> with no role — the screen reader reads the text but never says it is a control` }
+        : { level: "serious", code: "clickable-no-role", msg: "focused element has neither a role nor a name — silence, then nothing to act on" });
+    } else if (!entry.name) {
+      entry.issues.push({ level: "critical", code: "no-name", msg: `focused ${entry.role} has no accessible name — announced as just "${entry.role}"` });
+    }
+    if (el.closest("[aria-hidden='true']")) entry.issues.push({ level: "critical", code: "in-aria-hidden", msg: "focused element is inside aria-hidden=\"true\" — keyboard reaches it, screen reader announces nothing" });
+    const cs = getComputedStyle(el);
+    const r = el.getBoundingClientRect();
+    if (!stillFocused) { push(entry); return; } // transient focus (element removed / focus moved on) — name/role only
+    if (!el.getClientRects().length || cs.visibility === "hidden" || cs.opacity === "0") entry.issues.push({ level: "serious", code: "invisible", msg: "focused element is invisible (display/visibility/opacity) — sighted keyboard users lose track" });
+    else if (r.right <= 0 || r.bottom <= 0 || r.left >= innerWidth || r.top >= innerHeight) {
+      const skip = entry.role === "link" && /^#/.test(el.getAttribute("href") || "");
+      entry.issues.push({ level: skip ? "minor" : "moderate", code: skip ? "skip-offscreen" : "offscreen", msg: skip ? "skip link is off-screen while focused — it should become visible on focus" : "focused element is off-screen — not scrolled into view" });
+    }
+    if (el.tabIndex > 0) entry.issues.push({ level: "moderate", code: "positive-tabindex", msg: `tabindex="${el.tabIndex}" — positive tabindex hijacks the natural order` });
+    let modal = null;
+    try { modal = document.querySelector("dialog[open],[role='dialog'][aria-modal='true'],[role='alertdialog'][aria-modal='true']"); } catch (_) {}
+    if (modal && modal.getClientRects().length && !modal.contains(el)) entry.issues.push({ level: "critical", code: "modal-escape", msg: "focus escaped the open modal dialog — the dialog does not trap focus" });
+    if (cs.outlineStyle === "none" && cs.boxShadow === "none" && el.matches(":focus-visible")) entry.issues.push({ level: "moderate", code: "no-focus-style", msg: "no outline or box-shadow while focus-visible — check that a visible focus style exists (WCAG 2.4.7)" });
+    if (entry.role === "textbox" && !entry.issues.length && el.getAttribute("placeholder") && !el.labels?.length && !a("aria-label") && !a("aria-labelledby")) entry.issues.push({ level: "serious", code: "placeholder-only", msg: "text field is named by its placeholder only" });
+    push(entry);
+  };
+  state.handler = (e) => {
+    const target = (e.composedPath && e.composedPath()[0]) || e.target;
+    if (!target || target.nodeType !== 1) return;
+    setTimeout(() => record(target, state.walkVia || "event"), 30); // let :focus styles and scroll settle
+  };
+  document.addEventListener("focusin", state.handler, true);
+  state.timer = setInterval(() => {
+    if (!document.hasFocus()) return;
+    const ae = deepActive();
+    if (ae !== state.lastEl) {
+      if (ae === document.body && state.lastEl && !state.lastEl.isConnected) record(document.body, "poll");
+      else if (ae === document.body) record(document.body, "poll");
+      else if (ae) record(ae, "poll");
+    }
+  }, 300);
+  state.lastEl = deepActive();
+  window.__a11yFocus = state;
+  return { already: false };
+}
+
+function focusDrainInPage() {
+  const s = window.__a11yFocus;
+  if (!s) return null;
+  return s.log.splice(0);
+}
+
+// Keyboard auto-walk: with the trace installed, move focus through the page in real Tab order
+// (positive tabindex ascending, then DOM order, shadow roots flattened) and report the stops the
+// keyboard cannot reach, order jumps and trap candidates. Async: executeScript awaits the promise.
+async function focusWalkInPage(maxSteps) {
+  const s = window.__a11yFocus;
+  if (!s) return { error: "focus trace is not running" };
+  const cap = Math.max(1, Math.min(400, Number(maxSteps) || 400));
+  const cssPath = (el) => {
+    const parts = [];
+    let cur = el;
+    for (let depth = 0; cur && cur.nodeType === 1 && depth < 6; depth++) {
+      if (cur.id) { parts.unshift("#" + CSS.escape(cur.id)); break; }
+      const tag = cur.tagName.toLowerCase();
+      if (tag === "body" || tag === "html") { parts.unshift(tag); break; }
+      const parent = cur.parentElement;
+      if (!parent) {
+        const root = cur.getRootNode && cur.getRootNode();
+        if (root && root.host) return cssPath(root.host) + " >>> " + [tag, ...parts].join(" > ");
+        parts.unshift(tag); break;
+      }
+      parts.unshift(`${tag}:nth-child(${[...parent.children].indexOf(cur) + 1})`);
+      cur = parent;
+    }
+    return parts.join(" > ");
+  };
+  const txt = (x) => (x || "").replace(/\s+/g, " ").trim();
+  const IMPLICIT = { a: "link", button: "button", input: "textbox", select: "combobox", textarea: "textbox", summary: "button", iframe: "iframe", dialog: "dialog" };
+  const roleOf = (el) => {
+    const r = el.getAttribute("role");
+    if (r) return r.split(/\s+/)[0];
+    const tag = el.tagName.toLowerCase();
+    if (tag === "input") return /^(checkbox|radio|button|submit|reset)$/.test(el.type) ? (el.type === "checkbox" || el.type === "radio" ? el.type : "button") : "textbox";
+    if (tag === "a" && !el.hasAttribute("href")) return "generic";
+    return IMPLICIT[tag] || "generic";
+  };
+  const nameOf = (el) => {
+    let n = txt(el.getAttribute("aria-label")); if (n) return n;
+    if (el.labels && el.labels.length) { n = txt([...el.labels].map((l) => l.textContent).join(" ")); if (n) return n; }
+    const tag = el.tagName.toLowerCase();
+    if (tag === "img") return txt(el.getAttribute("alt"));
+    if (tag === "input" && /^(button|submit|reset)$/.test(el.type)) return txt(el.value);
+    if (!/^(input|select|textarea)$/.test(tag)) { n = txt(el.textContent); if (n) return n.slice(0, 160); }
+    return txt(el.getAttribute("title")) || txt(el.getAttribute("placeholder")) || "";
+  };
+  // flattened DOM walk: light children in order, shadow trees inline at their host
+  const all = [];
+  const visit = (el) => {
+    all.push(el);
+    if (el.shadowRoot) for (const c of el.shadowRoot.children) visit(c);
+    for (const c of el.children) visit(c);
+  };
+  for (const c of document.body ? document.body.children : []) visit(c);
+  const pos = new Map();
+  all.forEach((el, i) => pos.set(el, i));
+  const candidates = all
+    .filter((el) => el.tabIndex >= 0 && !el.disabled && !/^(html|body)$/i.test(el.tagName) && (el.hasAttribute("tabindex") || el.matches("a[href],area[href],button,input:not([type=hidden]),select,textarea,summary,iframe,audio[controls],video[controls],[contenteditable]:not([contenteditable=false])")))
+    .sort((a, b) => ((a.tabIndex > 0 ? a.tabIndex : Infinity) - (b.tabIndex > 0 ? b.tabIndex : Infinity)) || (pos.get(a) - pos.get(b)));
+  const deepActive = () => {
+    let a = document.activeElement;
+    while (a && a.shadowRoot && a.shadowRoot.activeElement) a = a.shadowRoot.activeElement;
+    return a;
+  };
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const whyUnreachable = (el) => {
+    if (el.closest("[inert]")) return "inside an inert subtree";
+    const cs = getComputedStyle(el);
+    if (!el.getClientRects().length) return cs.display === "none" ? "display:none" : "not rendered (no box)";
+    if (cs.visibility === "hidden") return "visibility:hidden";
+    if (el.closest("[aria-hidden='true']")) return "inside aria-hidden=\"true\"";
+    if (el.tagName.toLowerCase() === "iframe") return "focus moved into the frame document";
+    return "focus() was refused by the browser";
+  };
+  const entry = (el, extra) => Object.assign({ t: Date.now() - s.start, sel: cssPath(el), tag: el.tagName.toLowerCase(), role: roleOf(el), name: nameOf(el), html: el.outerHTML.slice(0, 200), tabindex: el.tabIndex }, extra);
+  const result = { candidates: candidates.length, steps: Math.min(cap, candidates.length), truncated: candidates.length > cap, reached: 0, unreachable: [], jumps: [], traps: [] };
+  const origin = deepActive();
+  const wasMuted = window.__a11yLensMuted;
+  window.__a11yLensMuted = true;
+  s.walkVia = "walk";
+  try {
+    let prev = null;
+    for (const el of candidates.slice(0, cap)) {
+      if (!el.isConnected) continue;
+      try { el.focus({ preventScroll: false }); } catch (_) {}
+      await wait(60);
+      const active = deepActive();
+      if (active !== el) {
+        result.unreachable.push(entry(el, { reason: whyUnreachable(el) }));
+        continue;
+      }
+      result.reached++;
+      if (el.tabIndex === 0 && prev && pos.get(el) < pos.get(prev)) result.jumps.push(entry(el, { after: cssPath(prev), afterTabindex: prev.tabIndex }));
+      const trapHost = el.closest("[onkeydown]") || el.closest("[role='dialog']:not([aria-modal='true']),[role='alertdialog']:not([aria-modal='true'])");
+      if (trapHost && trapHost !== el) {
+        const why = trapHost.hasAttribute("onkeydown") ? "inside a container with an onkeydown handler" : "inside role=\"dialog\" without aria-modal";
+        if (!result.traps.some((x) => x.container === cssPath(trapHost))) result.traps.push(entry(el, { container: cssPath(trapHost), reason: why }));
+      }
+      prev = el;
+    }
+    await wait(80); // let the trace's delayed focusin record settle
+    if (origin && origin !== document.body && origin.isConnected) { try { origin.focus(); } catch (_) {} }
+    else { const a = deepActive(); if (a && a !== document.body) a.blur(); }
+    s.lastEl = deepActive(); // synchronously, so the poll does not report the walk's own blur as focus-lost
+    await wait(60);
+  } finally {
+    s.walkVia = null;
+    window.__a11yLensMuted = wasMuted;
+  }
+  return result;
+}
+
+function focusStopInPage() {
+  const s = window.__a11yFocus;
+  if (s) {
+    try { document.removeEventListener("focusin", s.handler, true); } catch (_) {}
+    clearInterval(s.timer);
+  }
+  window.__a11yFocus = null;
+  return true;
+}
+
+/* ---------- browser accessibility tree via the debugger protocol (Chromium, opt-in) ---------- */
+
+const AX_CSS_PATH_FN = `function () {
+  const cssPath = (el) => {
+    const parts = [];
+    let cur = el;
+    for (let depth = 0; cur && cur.nodeType === 1 && depth < 6; depth++) {
+      if (cur.id) { parts.unshift("#" + CSS.escape(cur.id)); break; }
+      const tag = cur.tagName.toLowerCase();
+      if (tag === "body" || tag === "html") { parts.unshift(tag); break; }
+      const parent = cur.parentElement;
+      if (!parent) {
+        const root = cur.getRootNode && cur.getRootNode();
+        if (root && root.host) return cssPath(root.host) + " >>> " + [tag, ...parts].join(" > ");
+        parts.unshift(tag); break;
+      }
+      parts.unshift(tag + ":nth-child(" + ([...parent.children].indexOf(cur) + 1) + ")");
+      cur = parent;
+    }
+    return parts.join(" > ");
+  };
+  const el = this.nodeType === 1 ? this : this.parentElement;
+  if (!el) return { sel: "", tag: "", cls: "", component: "" };
+  let component = "";
+  for (let cur = el; cur && cur.nodeType === 1 && !component; cur = cur.parentElement) {
+    for (const c of cur.classList || []) if (c.startsWith("aegov-")) { component = c; break; }
+  }
+  return { sel: cssPath(el), tag: el.tagName.toLowerCase(), cls: [...el.classList].sort().join(" "), component };
+}`;
+
+async function axTreeViaDebugger(tabId) {
+  if (!EXT.debugger || !EXT.permissions) {
+    throw new Error("The browser accessibility tree needs the debugger API — Chromium only (Chrome, Edge, Brave).");
+  }
+  let has = false;
+  try { has = await EXT.permissions.contains({ permissions: ["debugger"] }); } catch (_) {}
+  if (!has) {
+    let granted = false;
+    try { granted = await EXT.permissions.request({ permissions: ["debugger"] }); } catch (_) {}
+    if (!granted) throw new Error("permission-needed");
+  }
+  const target = { tabId };
+  await EXT.debugger.attach(target, "1.3");
+  const send = (method, params) => EXT.debugger.sendCommand(target, method, params || {});
+  try {
+    await send("Accessibility.enable");
+    await send("DOM.enable");
+    await send("DOM.getDocument", { depth: 0 });
+    const { nodes } = await send("Accessibility.getFullAXTree");
+    const byId = new Map(nodes.map((n) => [n.nodeId, n]));
+    const val = (v) => (v && v.value != null ? v.value : v && v.type === "computedString" ? v.value : "");
+    const INTERACTIVE = new Set(["link", "button", "checkbox", "radio", "textbox", "combobox", "listbox",
+      "menuitem", "menuitemcheckbox", "menuitemradio", "option", "slider", "spinbutton", "switch", "tab",
+      "searchbox", "treeitem", "ComboBox", "Link", "Button"]);
+    const GENERIC = /^(click here|here|more|read more|learn more|details|link|button|image|icon|submit|go|see more|view more|click)$/i;
+    const rows = [];
+    const walk = (id, depth) => {
+      const n = byId.get(id);
+      if (!n || rows.length >= 1500) return;
+      const role = String(val(n.role) || "").toLowerCase();
+      const name = String(val(n.name) || "").replace(/\s+/g, " ").trim();
+      if (!n.ignored && role && role !== "none" && role !== "generic" && role !== "rootwebarea" && role !== "inlinetextbox") {
+        const props = {};
+        for (const p of n.properties || []) props[p.name] = val(p.value);
+        const states = Object.entries(props)
+          .filter(([k, v]) => ["checked", "expanded", "pressed", "selected", "disabled", "required", "invalid", "readonly", "level", "focused", "hasPopup", "busy", "modal", "multiselectable", "current"].includes(k) && v !== false && v !== "false")
+          .map(([k, v]) => (v === true || v === "true" ? k : `${k}=${v}`));
+        const issues = [];
+        const roleL = role.toLowerCase();
+        if (INTERACTIVE.has(roleL) && !name) issues.push({ level: "critical", code: "no-name", msg: `${roleL} has no accessible name in the browser tree — announced as just "${roleL}"` });
+        else if ((roleL === "link" || roleL === "button") && GENERIC.test(name)) issues.push({ level: "serious", code: "generic-name", msg: `generic name "${name}"` });
+        if (roleL === "image" && !name) issues.push({ level: "serious", code: "img-no-name", msg: "image exposed with no name" });
+        if (roleL === "heading" && !name) issues.push({ level: "serious", code: "empty-heading", msg: "empty heading" });
+        if (props.focusable === true && roleL === "generic") issues.push({ level: "serious", code: "clickable-no-role", msg: "focusable generic — no role" });
+        rows.push({ role: roleL === "statictext" ? "text" : roleL, name, depth, states, issues, backendDOMNodeId: n.backendDOMNodeId, sel: "", tag: "", cls: "", component: "",
+          description: String(val(n.description) || "") });
+      }
+      const nextDepth = n.ignored ? depth : depth + 1;
+      for (const c of n.childIds || []) walk(c, nextDepth);
+    };
+    const root = nodes.find((n) => !n.parentId) || nodes[0];
+    if (root) walk(root.nodeId, 0);
+    // Resolve CSS selectors for rows the user might want to highlight (cap for speed)
+    let resolved = 0;
+    for (const r of rows) {
+      if (resolved >= 700) break;
+      if (!r.backendDOMNodeId) continue;
+      try {
+        const { object } = await send("DOM.resolveNode", { backendNodeId: r.backendDOMNodeId });
+        if (!object || !object.objectId) continue;
+        const res = await send("Runtime.callFunctionOn", { objectId: object.objectId, functionDeclaration: AX_CSS_PATH_FN, returnByValue: true });
+        const v = (res && res.result && res.result.value) || "";
+        if (typeof v === "string") r.sel = v;
+        else { r.sel = v.sel || ""; r.tag = v.tag || ""; r.cls = v.cls || ""; r.component = v.component || ""; }
+        await send("Runtime.releaseObject", { objectId: object.objectId }).catch(() => {});
+        resolved++;
+      } catch (_) {}
+    }
+    const issues = rows.reduce((a, r) => a + r.issues.length, 0);
+    return { rows, summary: { rows: rows.length, issues, total: nodes.length, ignored: nodes.filter((n) => n.ignored).length }, truncated: rows.length >= 1500 };
+  } finally {
+    try { await send("Accessibility.disable"); } catch (_) {}
+    try { await EXT.debugger.detach(target); } catch (_) {}
+  }
+}
+
 /* ---------- message router ---------- */
 
-const DEFAULT_SETTINGS = { level: "wcag22aa", bestPractice: false, flowInterval: 4, lang: "en", framework: "html", mode: "a11y", dlsContrast: false };
+// "Recommended" preset: WCAG 2.2 AA + best practices + SR rules (heading order, landmarks,
+// table headers and the experimental screen-reader rules are graded out of the box).
+const DEFAULT_SETTINGS = { level: "wcag22aa", bestPractice: true, flowInterval: 4, lang: "en", framework: "html", mode: "a11y", dlsContrast: false, srRules: true, srRate: 1 };
+
+// One-time migration: best practices used to default to off. Existing users keep every other
+// stored value; only bestPractice is switched on once (bpMigrated marks it done so a later
+// explicit "off" is respected).
+async function settingsMigrated() {
+  const stored = await EXT.storage.sync.get("settings");
+  const s = stored.settings || {};
+  if (s.bpMigrated) return s;
+  const next = { ...s, bestPractice: true, bpMigrated: true };
+  await EXT.storage.sync.set({ settings: next });
+  return next;
+}
+
+// Per-URL screen reader snapshots ("sr:<url>") are capped so chrome.storage.local can't fill
+// up with one entry per distinct href; the newest SR_STORE_MAX (by `at`) are kept.
+const SR_STORE_MAX = 20;
+async function srPruneStore(keep) {
+  const all = await EXT.storage.local.get(null);
+  const keys = Object.keys(all).filter((k) => k.startsWith("sr:") && k !== keep)
+    .sort((a, b) => ((all[b] && all[b].at) || 0) - ((all[a] && all[a].at) || 0));
+  const stale = keys.slice(SR_STORE_MAX - 1);
+  if (stale.length) await EXT.storage.local.remove(stale);
+}
+
+// Bilingual comparison: load the other-language URL in a hidden background tab, run the
+// reading-order and language checks there, and always close the tab again. One overall
+// deadline covers load + axe + tree + language check so a script-blocking page can't hang the panel.
+const SR_COMPARE_DEADLINE = 45000;
+async function srCompareInTab(url) {
+  if (!/^https?:\/\//i.test(url || "") && !/^file:/i.test(url || "")) throw new Error("Enter an http(s) URL to compare against");
+  const tab = await EXT.tabs.create({ url, active: false });
+  let deadline = null;
+  try {
+    return await Promise.race([
+      srCompareInTabBody(tab, url),
+      new Promise((_, reject) => { deadline = setTimeout(() => reject(new Error("Timed out after " + SR_COMPARE_DEADLINE / 1000 + " s comparing " + url)), SR_COMPARE_DEADLINE); }),
+    ]);
+  } finally {
+    clearTimeout(deadline);
+    try { await EXT.tabs.remove(tab.id); } catch (_) {}
+  }
+}
+
+async function srCompareInTabBody(tab, url) {
+  await new Promise((resolve, reject) => {
+    let done = false;
+    const finish = (err) => { if (done) return; done = true; clearTimeout(timer); EXT.tabs.onUpdated.removeListener(onUpdated); err ? reject(err) : resolve(); };
+    const timer = setTimeout(() => finish(new Error("Timed out after 20 s loading " + url)), 20000);
+    const onUpdated = (id, info) => { if (id === tab.id && info.status === "complete") finish(); };
+    EXT.tabs.onUpdated.addListener(onUpdated);
+    // in case the load already finished before the listener was attached
+    EXT.tabs.get(tab.id).then((t) => { if (t && t.status === "complete" && t.url && !/^about:/.test(t.url)) finish(); }).catch(() => {});
+  });
+  await new Promise((r) => setTimeout(r, 400)); // let client-side rendering settle
+  await EXT.scripting.executeScript({ target: { tabId: tab.id }, files: ["vendor/axe.min.js"] });
+  const order = await exec(tab.id, srTreeInPage);
+  if (!order || order.error) throw new Error((order && order.error) || "could not build the reading order of " + url);
+  const lang = await exec(tab.id, langCheckInPage);
+  return { url, order, lang };
+}
 
 async function exec(tabId, func, args, allFrames = false) {
   const results = await EXT.scripting.executeScript({
@@ -1107,7 +2561,7 @@ EXT.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         });
         return { result: true };
       case "runAxe":
-        return { result: await exec(tabId, runAxeInPage, [msg.runOnly ?? null]) };
+        return { result: await exec(tabId, runAxeInPage, [msg.runOnly ?? null, msg.rules ?? null]) };
       case "highlight":
         return { result: await exec(tabId, highlightInPage, [msg.selector]) };
       case "highlightAll":
@@ -1177,18 +2631,48 @@ EXT.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         const json = await res.json();
         return { result: json.content.filter((b) => b.type === "text").map((b) => b.text).join("") };
       }
+      case "srTree":
+        return { result: await exec(tabId, srTreeInPage) };
+      case "langCheck":
+        return { result: await exec(tabId, langCheckInPage) };
+      case "srCompare":
+        return { result: await srCompareInTab(msg.url) };
+      case "srApply":
+        return { result: await exec(tabId, srApplyInPage, [msg.selector, msg.patch]) };
+      case "srUndo":
+        return { result: await exec(tabId, srUndoInPage, [msg.selector]) };
+      case "liveStart":
+        return { result: await exec(tabId, liveInstallInPage) };
+      case "liveDrain":
+        return { result: await exec(tabId, liveDrainInPage) };
+      case "liveStop":
+        return { result: await exec(tabId, liveStopInPage) };
+      case "focusStart":
+        return { result: await exec(tabId, focusInstallInPage) };
+      case "focusDrain":
+        return { result: await exec(tabId, focusDrainInPage) };
+      case "focusStop":
+        return { result: await exec(tabId, focusStopInPage) };
+      case "focusWalk":
+        return { result: await exec(tabId, focusWalkInPage, [msg.maxSteps ?? 400]) };
+      case "axTree":
+        return { result: await axTreeViaDebugger(tabId) };
+      case "axTreeAvailable":
+        return { result: !!(EXT.debugger && EXT.permissions) };
       case "storeGet":
         return { result: (await EXT.storage.local.get(msg.key))[msg.key] ?? null };
       case "storeSet":
         await EXT.storage.local.set({ [msg.key]: msg.value });
+        if (String(msg.key).startsWith("sr:")) await srPruneStore(msg.key);
         return { result: true };
-      case "settingsGet": {
-        const stored = await EXT.storage.sync.get("settings");
-        return { result: { ...DEFAULT_SETTINGS, ...(stored.settings || {}) } };
-      }
+      case "storeRemove":
+        await EXT.storage.local.remove(msg.key);
+        return { result: true };
+      case "settingsGet":
+        return { result: { ...DEFAULT_SETTINGS, ...(await settingsMigrated()) } };
       case "settingsSet": {
-        const stored = await EXT.storage.sync.get("settings");
-        await EXT.storage.sync.set({ settings: { ...(stored.settings || {}), ...msg.value } });
+        const stored = await settingsMigrated();
+        await EXT.storage.sync.set({ settings: { ...stored, ...msg.value } });
         return { result: true };
       }
       default:

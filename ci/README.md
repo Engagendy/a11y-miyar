@@ -52,3 +52,10 @@ jobs:
       - run: npx wait-on http://localhost:3000
       - run: cd ci && npm ci && npm run a11y
 ```
+
+## Panel smoke test
+
+`npm run smoke` drives `panel.html` headlessly against `test-page.html` with a stubbed
+background (English and Arabic): reading order, live-region monitor, focus trace,
+language check, browser accessibility tree, SR rules scan, and exports. Exits non-zero
+on any page error.

@@ -33,6 +33,7 @@
       <label for="bestPractice">Include best-practice rules by default</label>
       <input type="checkbox" id="bestPractice" />
     </div>
+    <p class="hint">On by default (the "Recommended" preset): heading order, landmarks/regions, page has one h1 and empty table headers are graded and tagged "best practice" in the Automated tab. Turn off for a strict WCAG-only report.</p>
 
     <div class="row">
       <label for="flowInterval">Flow recording scan interval (seconds)</label>
@@ -64,6 +65,26 @@
       </select>
     </div>
     <p class="hint">Applies to the panel controls. Reopen DevTools after changing. Detailed test content remains in English for now.</p>
+
+    <h1>Screen reader checks</h1>
+
+    <div class="row">
+      <label for="srRules">Enable axe's experimental screen-reader rules by default</label>
+      <input type="checkbox" id="srRules" />
+    </div>
+    <p class="hint">Adds label-content-name-mismatch (WCAG 2.5.3), p-as-heading, table-fake-caption,
+    td-has-header and focus-order-semantics to every scan. axe ships these off because they can
+    produce false positives — review each finding.</p>
+
+    <div class="row" id="axRow">
+      <label for="axGrant">Browser accessibility tree (Chromium only)</label>
+      <button id="axGrant" type="button">Grant debugger permission</button>
+      <button id="axRevoke" type="button" hidden>Revoke</button>
+    </div>
+    <p class="hint" id="axHint">The 🔊 Screen reader tab can fetch the accessibility tree the browser
+    actually hands to NVDA/VoiceOver, via the DevTools protocol. Chrome shows an "is debugging this
+    tab" bar while the tree is read (about a second) and the permission is released right after.
+    Nothing leaves your machine.</p>
 
     <h1>AI fix (optional)</h1>
 
