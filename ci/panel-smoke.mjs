@@ -425,6 +425,20 @@ const scoped = await panel.evaluate(async () => {
   out.filterCount = window.__utts.length + "/" + vis.length + "/" + rows().length;
   box.value = ""; box.dispatchEvent(new Event("input"));
   await wait(50);
+  // Playback bar stays pinned (position:fixed) while reading, so Stop is reachable
+  window.__utts.length = 0;
+  document.getElementById("srPlayBtn").click();
+  await wait(60);
+  const barEl = document.getElementById("srPlayBar");
+  out.bar = { hidden: barEl.hidden, position: getComputedStyle(barEl).position,
+    stop: document.getElementById("srBarStop").textContent.trim(),
+    pause: document.getElementById("srBarPause").textContent.trim(),
+    count: document.getElementById("srBarCount").textContent,
+    text: document.getElementById("srBarText").textContent.slice(0, 20) };
+  document.getElementById("srBarStop").click();
+  await wait(30);
+  out.barAfterStop = { hidden: barEl.hidden, playing: srSpeech.playing };
+
   // Space pauses/resumes (row stays highlighted), Escape stops
   window.__utts.length = 0;
   srPlayBtn.click();
@@ -447,6 +461,8 @@ const scoped = await panel.evaluate(async () => {
   return out;
 });
 console.log("scoped playback:", JSON.stringify(scoped));
+if (!scoped.bar || scoped.bar.hidden || scoped.bar.position !== "fixed" || !scoped.bar.stop || !scoped.bar.count.includes("/") ||
+    !scoped.barAfterStop.hidden || scoped.barAfterStop.playing) errors.push("play bar not pinned/stoppable: " + JSON.stringify(scoped.bar) + " " + JSON.stringify(scoped.barAfterStop));
 if (!scoped.rows || scoped.from !== scoped.speak || scoped.sub !== scoped.speak || !scoped.speakerIcon || !scoped.fromTitle || !new RegExp("\\b" + scoped.scopeN + "\\b").test(scoped.scopeTitle) ||
     !/^(Stop|إيقاف)/.test(scoped.fromPlayingLabel) || !scoped.fromOk || !scoped.subOk || !scoped.filterOk || !/\b\d+\b/.test(scoped.filterScope) || scoped.filterScope === scoped.scopeTitle ||
     !scoped.paused || !/^(Paused|متوقف مؤقتاً)/.test(scoped.pausedStatus) || !scoped.resumed || !scoped.escOk || !scoped.idleSpace) errors.push("scoped playback mismatch: " + JSON.stringify(scoped));

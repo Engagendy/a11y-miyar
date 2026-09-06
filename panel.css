@@ -1317,3 +1317,30 @@ details.sr-score-more > summary:hover { text-decoration: underline; }
 .sr-journey-gap::before { content: "✗ "; }
 .sr-journey-gap.serious { color: var(--serious); }
 .sr-journey-gap.moderate { color: var(--moderate-text); }
+
+/* Playback bar — pinned while speech is running so Stop is always reachable
+   even though each row scrolls the panel as it is read. */
+#srPlayBar {
+  position: fixed;
+  inset-inline: 10px;
+  bottom: 10px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: Canvas;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
+}
+#srPlayBar[hidden] { display: none; }
+#srPlayBar .sr-bar-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.85;
+}
+#srPlayBar .sr-bar-count { opacity: 0.6; white-space: nowrap; }

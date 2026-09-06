@@ -131,6 +131,8 @@ const STR = {
     srPickNoRow: "No reading-order row matches the picked element — build the reading order or clear the filter.",
     srPicking: "Click an element on the page…", srPickCancelled: "Nothing picked.", srPickFailed: "Pick failed: ",
     srPaused: "Paused — press Space to resume, Esc to stop.",
+    srPause: "Pause", srResume: "Resume",
+    srPauseTitle: "Pause / resume (Space)", srStopTitle: "Stop reading (Esc)",
     srPlayingFrom: "from here", srPlayingSubtree: "this section", srPlayingPick: "from the picked element",
     srNoVoice: (l) => `No ${l === "ar" ? "Arabic" : l === "en" ? "English" : l} voice installed in this browser — speaking with the default voice`,
     srPlaying: (i, n, scope) => `Speaking row ${i} of ${n}${scope ? " (" + scope + ")" : ""}…`, srPlayDone: (n) => `Played ${n} row(s).`, srNothingToPlay: "Nothing to play — build the reading order first.",
@@ -374,6 +376,8 @@ const STR = {
     srPickNoRow: "لا يوجد صف في ترتيب القراءة يطابق العنصر المختار — ابنِ ترتيب القراءة أو امسح التصفية.",
     srPicking: "انقر عنصراً في الصفحة…", srPickCancelled: "لم يُختر شيء.", srPickFailed: "فشل الاختيار: ",
     srPaused: "متوقف مؤقتاً — اضغط مسافة للاستئناف أو Esc للإيقاف.",
+    srPause: "إيقاف مؤقت", srResume: "استئناف",
+    srPauseTitle: "إيقاف مؤقت / استئناف (مسافة)", srStopTitle: "إيقاف القراءة (Esc)",
     srPlayingFrom: "من هنا", srPlayingSubtree: "هذا القسم", srPlayingPick: "من العنصر المختار",
     srNoVoice: (l) => `لا يوجد صوت ${l === "ar" ? "عربي" : l === "en" ? "إنجليزي" : l} مثبّت في هذا المتصفح — يُستخدم الصوت الافتراضي`,
     srPlaying: (i, n, scope) => `جارٍ نطق الصف ${i} من ${n}${scope ? " (" + scope + ")" : ""}…`, srPlayDone: (n) => `تم تشغيل ${n} صف/صفوف.`, srNothingToPlay: "لا شيء للتشغيل — ابنِ ترتيب القراءة أولاً.",
@@ -3898,6 +3902,11 @@ const srAxBtn = document.getElementById("srAxBtn");
 const srScoreCard = document.getElementById("srScoreCard");
 const srPlayBtn = document.getElementById("srPlayBtn");
 const srPlayPickBtn = document.getElementById("srPlayPickBtn");
+const srPlayBar = document.getElementById("srPlayBar");
+const srBarPause = document.getElementById("srBarPause");
+const srBarStop = document.getElementById("srBarStop");
+const srBarText = document.getElementById("srBarText");
+const srBarCount = document.getElementById("srBarCount");
 const srRateInput = document.getElementById("srRate");
 const srRateVal = document.getElementById("srRateVal");
 const srJourneySection = document.getElementById("srJourneySection");
@@ -5712,6 +5721,27 @@ function srSpeak(text, lng) {
   });
 }
 
+// The pinned playback bar: the section toolbar scrolls out of view while rows are
+// read (each row calls scrollIntoView), so Stop/Pause live here while speech runs.
+function srPlayBarShow(on) {
+  srPlayBar.hidden = !on;
+  document.body.classList.toggle("sr-playing", !!on);
+  if (!on) { srBarText.textContent = ""; srBarCount.textContent = ""; }
+  srPlayBarSync();
+}
+
+function srPlayBarSync() {
+  setLabel(srBarPause, srSpeech.paused ? "i-play" : "i-pause", srSpeech.paused ? t("srResume") : t("srPause"));
+  setLabel(srBarStop, "i-stop", t("srStop"));
+  srBarPause.title = t("srPauseTitle");
+  srBarStop.title = t("srStopTitle");
+}
+
+function srPlayBarRow(text, i, n) {
+  srBarText.textContent = text || "";
+  srBarCount.textContent = n ? `${i}/${n}` : "";
+}
+
 function srStopSpeech() {
   srSpeech.seq++;
   srSpeech.playing = false;
@@ -5722,6 +5752,7 @@ function srStopSpeech() {
   for (const el of document.querySelectorAll(".sr-speak.speaking")) el.classList.remove("speaking");
   setLabel(srPlayBtn, "i-play", t("srPlay"));
   srPlayBtn.classList.remove("playing", "paused");
+  srPlayBarShow(false);
 }
 
 // Space while playing: pause/resume (the current row stays highlighted); Esc: stop. Only while the SR tab is visible.
@@ -5731,6 +5762,7 @@ function srTogglePause() {
   try {
     if (srSpeech.paused) { synth.resume(); srSpeech.paused = false; srPlayBtn.classList.remove("paused"); statusEl.textContent = srSpeech.status || ""; }
     else { synth.pause(); srSpeech.paused = true; srPlayBtn.classList.add("paused"); statusEl.textContent = t("srPaused"); }
+    srPlayBarSync();
   } catch (_) { return false; }
   return true;
 }
@@ -5786,6 +5818,7 @@ async function srPlayRows(rows, label) {
   srSpeech.played = 0;
   setLabel(srPlayBtn, "i-stop", t("srStop"));
   srPlayBtn.classList.add("playing");
+  srPlayBarShow(true);
   let i = 0;
   for (const el of rows) {
     if (srSpeech.seq !== my) return;
@@ -5795,6 +5828,7 @@ async function srPlayRows(rows, label) {
     if (el.__srSpeech.sel) highlight([el.__srSpeech.sel]);
     srSpeech.status = t("srPlaying", i, rows.length, label);
     statusEl.textContent = srSpeech.status;
+    srPlayBarRow(el.__srSpeech.text, i, rows.length);
     await srSpeak(el.__srSpeech.text, el.__srSpeech.lang);
     srSpeech.played = i;
     el.classList.remove("sr-speaking");
@@ -5804,6 +5838,7 @@ async function srPlayRows(rows, label) {
   srSpeech.paused = false;
   setLabel(srPlayBtn, "i-play", t("srPlay"));
   srPlayBtn.classList.remove("playing", "paused");
+  srPlayBarShow(false);
   statusEl.textContent = t("srPlayDone", rows.length);
 }
 
@@ -5907,6 +5942,8 @@ function srApplyRate() {
   srRateVal.textContent = v.toFixed(1) + "×";
 }
 srPlayBtn.addEventListener("click", srPlayPage);
+srBarStop.addEventListener("click", () => { srStopSpeech(); statusEl.textContent = t("srPlayDone", srSpeech.played || 0); });
+srBarPause.addEventListener("click", srTogglePause);
 srPlayPickBtn.addEventListener("click", srPlayFromPick);
 srRateInput.addEventListener("input", () => {
   settings.srRate = Math.min(Math.max(parseFloat(srRateInput.value) || 1, 0.8), 2);
@@ -6115,6 +6152,7 @@ function srUpdateBadge(sc) {
 }
 
 function applySrStrings() {
+  srPlayBarSync();
   setTabLabel("sr", "i-speaker", t("tabSr"));
   document.getElementById("srIntro").textContent = t("srIntro");
   const secKey = { order: "srSecOrder", live: "srSecLive", focus: "srSecFocus", lang: "srSecLang", ntc: "srSecNtc", reflow: "srSecReflow", cmp: "srSecCmp", ax: "srSecAx" };

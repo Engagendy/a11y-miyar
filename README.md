@@ -167,6 +167,10 @@ engine behind axe DevTools.
     ("aegov-card · link"). Groups carry through to the Manual test findings
     (one per group, count in the note) and to exports (`instances`,
     `selectors`)
+  - *Pinned playback bar* — while a page or section is being read aloud, a
+    fixed bar with Pause and Stop plus the current row stays on screen, so
+    stopping never depends on scrolling back to the toolbar (Space pauses,
+    Esc stops)
   - *Every finding ships a fix* — "Now" (the element's real HTML) and "Change to"
     (a corrected, copy-ready snippet: `<label for>`, `role="status"` region
     created empty on load, `<button>` instead of a clickable `div`,
