@@ -1,6 +1,6 @@
 # Firefox Add-ons (AMO) submission kit
 
-Package: `store/a11y-miyar-firefox-v1.15.0.zip` (built by `./build-firefox.sh` from the
+Package: `store/a11y-miyar-firefox-v1.17.0.zip` (built by `./build-firefox.sh` from the
 v1.15.0 commit; also at `dist/a11y-miyar-firefox.zip`,
 gecko id `a11y-lens@engagendy.dev`, event-page background).
 
@@ -127,4 +127,34 @@ How to test
 4. Options page: language, rule set, framework for snippets.
 
 Source: https://github.com/Engagendy/a11y-miyar (commit c458781 = 1.15.0).
+```
+
+## Release notes — 1.17.0 (paste into "Release notes" on upload)
+
+```
+New since 1.14
+• Screen reader tab: the announced reading order with every name, role and
+  state; a live-region monitor that classifies each page change as ANNOUNCED,
+  VIA FOCUS, MAY BE MISSED or SILENT; a focus trace with keyboard auto-walk;
+  single-page-app navigation checks (unchanged title, duplicate H1, focus not
+  moved); missing state on custom controls; link behaviour (new tab, download,
+  external, href="#"); focus-ring contrast; non-text contrast (borders, icons,
+  toggles); form group labelling; a keyboard probe for custom widgets;
+  Arabic/English voice switching; a bilingual page comparison; a journey
+  transcript for recorded flows; a 0-100 score with Top 5 to fix
+• Hear it: read the page, a section or from any row aloud, with a pinned
+  playback bar (Pause, Stop, current row) that stays on screen while reading
+• Every finding ships a fix: current HTML to corrected snippet (HTML, React or
+  Vue) with an inline diff, Apply-on-page with re-verify, and ticket exports
+  with a "how to verify" step
+• Redesigned panel: one Run button, an Overview tab with per-audit cards and
+  top issues, filters on every tab, scan presets (Recommended / Strict WCAG /
+  Everything) with best-practice rules on by default, dark mode, full RTL
+• DLS tab toolbar: highlight all gaps, clear, and a filter box
+
+Firefox notes
+• The browser accessibility tree and the reflow/zoom test are Chromium-only
+  (they use the DevTools protocol) and are marked unavailable in Firefox. The
+  contrast eyedropper remains unavailable in Firefox (no EyeDropper API).
+  Everything else, including spoken playback, works identically.
 ```

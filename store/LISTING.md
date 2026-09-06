@@ -53,7 +53,7 @@ AND MORE
 • Options: default rule set, flow scan interval, English or Arabic (RTL) interface
 • Keyboard shortcuts: S scan, R record flow, X clear, C contrast, 1–6 tabs, / filter
 
-NEW IN v1.15
+NEW IN v1.17
 • 🔊 Screen reader tab — what a screen reader actually receives: the announced
   reading order with every name, role and state; a live-region monitor that
   classifies each page change as ANNOUNCED, VIA FOCUS, MAY BE MISSED or SILENT;
@@ -66,6 +66,13 @@ NEW IN v1.15
 • Every screen reader finding ships a fix: current HTML → corrected snippet
   (HTML/React/Vue) with an inline diff, Apply-on-page with re-verify, Copy,
   Inspect, and a spoken preview of what the screen reader would say
+• Reflow & zoom test: renders the page at 320 px and at 200 % text and reports
+  horizontal scrolling, clipped text, overlapping controls and oversized fixed
+  bars, with CSS fixes and before/after screenshots (Chromium, opt-in)
+• Hear it: read the page, a section or from any row aloud, with a pinned
+  playback bar (Pause, Stop, current row) that stays on screen while reading
+• Focus-ring contrast, non-text contrast (1.4.11), form group labelling and a
+  keyboard probe for custom tab strips, radio groups, listboxes and menus
 • Screen reader score and Top 5 to fix; findings flow into Issues/Jira/Azure
   tickets with a "How to verify" step
 • Redesigned panel: one Run button, an Overview tab with per-audit cards and
@@ -116,7 +123,7 @@ Deque Systems, Inc.
 - **Optional permission `debugger`:** Requested only when the user clicks
   "Grant" on the Options page and used for two opt-in checks in the Screen
   reader tab: reading the browser's real accessibility tree (what NVDA/VoiceOver
-  receive) and the reflow test. The extension attaches to the inspected tab for
+  receive) and the reflow/zoom test (320 px and 200 % text). The extension attaches to the inspected tab for
   about a second, runs the read-only DevTools-protocol commands, and detaches.
   Chrome shows its standard "is debugging this tab" bar during that time.
   Nothing is recorded or transmitted.
